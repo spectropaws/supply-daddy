@@ -1,16 +1,13 @@
 "use client";
 import React from "react";
 import type { Anomaly } from "../page";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
-interface Props {
-    anomalies: Anomaly[];
-}
-
-const severityConfig: Record<string, { color: string; bg: string; icon: string }> = {
-    CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: "🔴" },
-    HIGH: { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", icon: "🟠" },
-    MEDIUM: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)", icon: "🔵" },
-    LOW: { color: "#10b981", bg: "rgba(16,185,129,0.12)", icon: "🟢" },
+const severityConfig: Record<string, { text: string; bg: string }> = {
+    CRITICAL: { text: "text-red-400", bg: "bg-red-500/8" },
+    HIGH: { text: "text-amber-400", bg: "bg-amber-500/8" },
+    MEDIUM: { text: "text-blue-400", bg: "bg-blue-500/8" },
+    LOW: { text: "text-green-400", bg: "bg-green-500/8" },
 };
 
 const anomalyLabels: Record<string, string> = {
@@ -20,171 +17,68 @@ const anomalyLabels: Record<string, string> = {
     HUMIDITY_BREACH: "💧 Humidity Breach",
 };
 
+interface Props { anomalies: Anomaly[]; }
+
 export default function AlertsPanel({ anomalies }: Props) {
     const unresolvedAnomalies = anomalies.filter((a) => !a.resolved);
 
-    const cardStyle: React.CSSProperties = {
-        background: "var(--bg-card)",
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border-color)",
-        padding: "20px",
-        boxShadow: "var(--shadow-card)",
-        maxHeight: "500px",
-        overflowY: "auto",
-    };
-
     return (
-        <div style={cardStyle}>
-            <h2
-                style={{
-                    fontSize: "16px",
-                    fontWeight: 700,
-                    color: "var(--text-primary)",
-                    margin: "0 0 16px 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                }}
-            >
-                🚨 Risk Alerts
-                {unresolvedAnomalies.length > 0 && (
-                    <span
-                        style={{
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            padding: "2px 8px",
-                            borderRadius: "12px",
-                            background: "rgba(239,68,68,0.15)",
-                            color: "var(--accent-red)",
-                        }}
-                    >
-                        {unresolvedAnomalies.length} active
-                    </span>
+        <Card className="max-h-[500px] overflow-y-auto">
+            <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                    🚨 Risk Alerts
+                    {unresolvedAnomalies.length > 0 && (
+                        <span className="text-[11px] font-medium text-red-400 bg-red-500/8 px-2 py-0.5 rounded-full">
+                            {unresolvedAnomalies.length} active
+                        </span>
+                    )}
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                {unresolvedAnomalies.length === 0 && (
+                    <div className="text-center py-10 text-muted-foreground">
+                        <p className="text-3xl mb-2 animate-float">✅</p>
+                        <p className="text-sm">All clear — no active alerts</p>
+                    </div>
                 )}
-            </h2>
 
-            {unresolvedAnomalies.length === 0 && (
-                <div
-                    style={{
-                        textAlign: "center",
-                        padding: "32px",
-                        color: "var(--text-muted)",
-                    }}
-                >
-                    <p style={{ fontSize: "28px", margin: "0 0 8px 0" }}>✅</p>
-                    <p style={{ fontSize: "14px", margin: 0 }}>All clear — no active alerts</p>
-                </div>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {unresolvedAnomalies.map((a, i) => {
-                    const sev = severityConfig[a.severity] || severityConfig.MEDIUM;
-                    return (
-                        <div
-                            key={`${a.shipment_id}-${a.anomaly_type}-${i}`}
-                            className="animate-fade-in"
-                            style={{
-                                background: sev.bg,
-                                borderRadius: "var(--radius-sm)",
-                                padding: "14px",
-                                border: `1px solid ${sev.color}22`,
-                                animationDelay: `${i * 0.05}s`,
-                            }}
-                        >
+                <div className="flex flex-col gap-2">
+                    {unresolvedAnomalies.map((a, i) => {
+                        const sev = severityConfig[a.severity] || severityConfig.MEDIUM;
+                        return (
                             <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "flex-start",
-                                    marginBottom: "6px",
-                                }}
+                                key={`${a.shipment_id}-${a.anomaly_type}-${i}`}
+                                className={`animate-fade-in rounded-lg p-3 ${sev.bg} transition-all duration-200 hover:shadow-sm`}
+                                style={{ animationDelay: `${i * 40}ms` }}
                             >
-                                <div>
-                                    <span
-                                        style={{
-                                            fontSize: "13px",
-                                            fontWeight: 600,
-                                            color: sev.color,
-                                        }}
-                                    >
-                                        {anomalyLabels[a.anomaly_type] || a.anomaly_type}
-                                    </span>
-                                    <span
-                                        style={{
-                                            fontSize: "12px",
-                                            color: "var(--text-muted)",
-                                            marginLeft: "8px",
-                                        }}
-                                    >
-                                        {a.shipment_id}
+                                <div className="flex justify-between items-start mb-1">
+                                    <div>
+                                        <span className={`text-[13px] font-semibold ${sev.text}`}>
+                                            {anomalyLabels[a.anomaly_type] || a.anomaly_type}
+                                        </span>
+                                        <span className="text-[11px] text-muted-foreground ml-2">{a.shipment_id}</span>
+                                    </div>
+                                    <span className={`text-[10px] font-semibold ${sev.text} bg-background/30 px-1.5 py-0.5 rounded`}>
+                                        {a.severity}
                                     </span>
                                 </div>
-                                <span
-                                    style={{
-                                        fontSize: "11px",
-                                        fontWeight: 600,
-                                        padding: "2px 8px",
-                                        borderRadius: "8px",
-                                        background: `${sev.color}22`,
-                                        color: sev.color,
-                                    }}
-                                >
-                                    {a.severity}
-                                </span>
+
+                                {a.location_code && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">📍 {a.location_code}</p>
+                                )}
+
+                                {a.genai_assessment && (
+                                    <div className="mt-2 p-2.5 rounded-md bg-card/50 text-xs leading-relaxed">
+                                        <span className="font-semibold text-purple-400 text-[11px]">🤖 AI Assessment</span>
+                                        <p className="text-muted-foreground mt-1">{a.genai_assessment.risk_assessment}</p>
+                                        <p className="text-amber-400/80 mt-1 font-medium text-[11px]">→ {a.genai_assessment.recommended_action}</p>
+                                    </div>
+                                )}
                             </div>
-
-                            {a.location_code && (
-                                <p
-                                    style={{
-                                        fontSize: "12px",
-                                        color: "var(--text-secondary)",
-                                        margin: "4px 0",
-                                    }}
-                                >
-                                    📍 {a.location_code}
-                                </p>
-                            )}
-
-                            {/* GenAI Assessment */}
-                            {a.genai_assessment && (
-                                <div
-                                    style={{
-                                        marginTop: "8px",
-                                        padding: "10px",
-                                        borderRadius: "6px",
-                                        background: "var(--bg-secondary)",
-                                        fontSize: "12px",
-                                        lineHeight: 1.5,
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            fontWeight: 600,
-                                            color: "var(--accent-purple)",
-                                            display: "block",
-                                            marginBottom: "4px",
-                                        }}
-                                    >
-                                        🤖 AI Assessment
-                                    </span>
-                                    <p style={{ color: "var(--text-secondary)", margin: "2px 0" }}>
-                                        {a.genai_assessment.risk_assessment}
-                                    </p>
-                                    <p
-                                        style={{
-                                            color: "var(--accent-amber)",
-                                            margin: "4px 0 0 0",
-                                            fontWeight: 500,
-                                        }}
-                                    >
-                                        → {a.genai_assessment.recommended_action}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
+                        );
+                    })}
+                </div>
+            </CardContent>
+        </Card>
     );
 }

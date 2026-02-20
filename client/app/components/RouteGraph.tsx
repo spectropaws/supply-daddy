@@ -14,8 +14,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Shipment } from "../page";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiFetch, API_BASE } from "../lib/apiFetch";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface GraphData {
     nodes: { id: string; name: string; x: number; y: number }[];
@@ -26,13 +26,13 @@ interface Props {
     shipment: Shipment | null;
 }
 
-/* Custom node */
+/* Custom node — kept with inline styles for ReactFlow compatibility */
 function TransitNode({ data }: { data: { label: string; code: string; status: string } }) {
     const colorMap: Record<string, string> = {
-        visited: "var(--accent-green)",
-        current: "var(--accent-blue)",
-        upcoming: "var(--text-muted)",
-        default: "var(--text-muted)",
+        visited: "#10b981",
+        current: "#3b82f6",
+        upcoming: "#64748b",
+        default: "#64748b",
     };
     const color = colorMap[data.status] || colorMap.default;
     const isCurrent = data.status === "current";
@@ -42,7 +42,7 @@ function TransitNode({ data }: { data: { label: string; code: string; status: st
             <Handle type="target" position={Position.Top} style={{ visibility: "hidden" }} />
             <div
                 style={{
-                    background: "var(--bg-card)",
+                    background: "hsl(var(--card))",
                     border: `2px solid ${color}`,
                     borderRadius: "12px",
                     padding: "8px 14px",
@@ -55,7 +55,7 @@ function TransitNode({ data }: { data: { label: string; code: string; status: st
                 <div style={{ fontSize: "11px", fontWeight: 700, color, letterSpacing: "0.5px" }}>
                     {data.code}
                 </div>
-                <div style={{ fontSize: "10px", color: "var(--text-secondary)", marginTop: "2px", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", marginTop: "2px", whiteSpace: "nowrap" }}>
                     {data.label}
                 </div>
             </div>
@@ -70,7 +70,7 @@ export default function RouteGraph({ shipment }: Props) {
     const [graphData, setGraphData] = useState<GraphData | null>(null);
 
     useEffect(() => {
-        fetch(`${API_BASE}/routes/graph`)
+        apiFetch(`${API_BASE}/routes/graph`)
             .then((r) => r.json())
             .then(setGraphData)
             .catch(console.error);
@@ -82,7 +82,6 @@ export default function RouteGraph({ shipment }: Props) {
         const routeCodes = new Set(shipment?.route?.map((n) => n.location_code) || []);
         const routeEdgeKeys = new Set<string>();
 
-        // Build set of edges in the active route
         if (shipment?.route) {
             for (let i = 0; i < shipment.route.length - 1; i++) {
                 const a = shipment.route[i].location_code;
@@ -92,7 +91,6 @@ export default function RouteGraph({ shipment }: Props) {
             }
         }
 
-        // Determine node statuses
         const nodeStatus = (code: string): string => {
             if (!shipment?.route || !routeCodes.has(code)) return "default";
             const node = shipment.route.find((n) => n.location_code === code);
@@ -119,11 +117,11 @@ export default function RouteGraph({ shipment }: Props) {
                 target: e.target,
                 label: e.label,
                 style: {
-                    stroke: isActive ? "var(--accent-blue)" : "var(--border-color)",
+                    stroke: isActive ? "#3b82f6" : "hsl(var(--border))",
                     strokeWidth: isActive ? 2.5 : 1,
                 },
                 labelStyle: {
-                    fill: isActive ? "var(--accent-blue)" : "var(--text-muted)",
+                    fill: isActive ? "#3b82f6" : "hsl(var(--muted-foreground))",
                     fontSize: 10,
                     fontWeight: isActive ? 600 : 400,
                 },
@@ -134,61 +132,47 @@ export default function RouteGraph({ shipment }: Props) {
         return { flowNodes, flowEdges };
     }, [graphData, shipment]);
 
-    const cardStyle: React.CSSProperties = {
-        background: "var(--bg-card)",
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border-color)",
-        padding: "20px",
-        boxShadow: "var(--shadow-card)",
-    };
-
     return (
-        <div style={cardStyle}>
-            <h2
-                style={{
-                    fontSize: "16px",
-                    fontWeight: 700,
-                    color: "var(--text-primary)",
-                    margin: "0 0 12px 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                }}
-            >
-                🗺️ Route Network
-                {shipment && (
-                    <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--accent-cyan)" }}>
-                        {shipment.shipment_id}
-                    </span>
-                )}
-            </h2>
-            <div style={{ height: "420px", borderRadius: "8px", overflow: "hidden", background: "var(--bg-primary)" }}>
-                {flowNodes.length > 0 ? (
-                    <ReactFlow
-                        nodes={flowNodes}
-                        edges={flowEdges}
-                        nodeTypes={nodeTypes}
-                        fitView
-                        fitViewOptions={{ padding: 0.2 }}
-                        proOptions={{ hideAttribution: true }}
-                        style={{ background: "var(--bg-primary)" }}
-                    >
-                        <Background color="var(--border-color)" gap={24} size={1} />
-                        <Controls
-                            style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "8px" }}
-                        />
-                        <MiniMap
-                            style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "8px" }}
-                            nodeColor="var(--accent-blue)"
-                            maskColor="rgba(0,0,0,0.5)"
-                        />
-                    </ReactFlow>
-                ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" }}>
-                        Loading network graph...
-                    </div>
-                )}
-            </div>
-        </div>
+        <Card>
+            <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                    🗺️ Route Network
+                    {shipment && (
+                        <span className="text-xs font-normal text-cyan-400">
+                            {shipment.shipment_id}
+                        </span>
+                    )}
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="h-[420px] rounded-lg overflow-hidden bg-background">
+                    {flowNodes.length > 0 ? (
+                        <ReactFlow
+                            nodes={flowNodes}
+                            edges={flowEdges}
+                            nodeTypes={nodeTypes}
+                            fitView
+                            fitViewOptions={{ padding: 0.2 }}
+                            proOptions={{ hideAttribution: true }}
+                            style={{ background: "hsl(var(--background))" }}
+                        >
+                            <Background color="hsl(var(--border))" gap={24} size={1} />
+                            <Controls
+                                style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                            />
+                            <MiniMap
+                                style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                                nodeColor="#3b82f6"
+                                maskColor="rgba(0,0,0,0.5)"
+                            />
+                        </ReactFlow>
+                    ) : (
+                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                            Loading network graph...
+                        </div>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
     );
 }

@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiFetch, API_BASE } from "../lib/apiFetch";
 
 export interface User {
     user_id: string;
@@ -52,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        fetch(`${API_BASE}/auth/me`, {
+        apiFetch(`${API_BASE}/auth/me`, {
             headers: { Authorization: `Bearer ${storedToken}` },
         })
             .then((res) => {
@@ -84,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: string;
             node_codes?: string[];
         }) => {
-            const res = await fetch(`${API_BASE}/auth/register`, {
+            const res = await apiFetch(`${API_BASE}/auth/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
@@ -104,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const login = useCallback(
         async (email: string, password: string) => {
-            const res = await fetch(`${API_BASE}/auth/login`, {
+            const res = await apiFetch(`${API_BASE}/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),

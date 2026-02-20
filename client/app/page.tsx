@@ -8,8 +8,9 @@ import BlockchainPanel from "./components/BlockchainPanel";
 import ETATimeline from "./components/ETATimeline";
 import GodMode from "./components/GodMode";
 import RouteGraph from "./components/RouteGraph";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiFetch, API_BASE } from "./lib/apiFetch";
+import { Button } from "./components/ui/button";
+import { Badge } from "./components/ui/badge";
 
 export type Role = "manufacturer" | "transit_node" | "receiver";
 
@@ -82,30 +83,20 @@ export default function Home() {
   const fetchShipments = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_BASE}/shipments/`, {
-        headers: authHeaders(),
-      });
+      const res = await apiFetch(`${API_BASE}/shipments/`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setShipments(data);
-        if (data.length > 0 && !selectedShipment) {
-          setSelectedShipment(data[0]);
-        }
+        if (data.length > 0 && !selectedShipment) setSelectedShipment(data[0]);
       }
-    } catch (e) {
-      console.error("Failed to fetch shipments:", e);
-    }
+    } catch (e) { console.error("Failed to fetch shipments:", e); }
   }, [token, authHeaders, selectedShipment]);
 
   const fetchAnomalies = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/anomalies`);
-      if (res.ok) {
-        setAnomalies(await res.json());
-      }
-    } catch (e) {
-      console.error("Failed to fetch anomalies:", e);
-    }
+      const res = await apiFetch(`${API_BASE}/anomalies`);
+      if (res.ok) setAnomalies(await res.json());
+    } catch (e) { console.error("Failed to fetch anomalies:", e); }
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -113,14 +104,9 @@ export default function Home() {
     await Promise.all([fetchShipments(), fetchAnomalies()]);
     if (selectedShipment && token) {
       try {
-        const res = await fetch(
-          `${API_BASE}/shipments/${selectedShipment.shipment_id}`,
-          { headers: authHeaders() }
-        );
+        const res = await apiFetch(`${API_BASE}/shipments/${selectedShipment.shipment_id}`, { headers: authHeaders() });
         if (res.ok) setSelectedShipment(await res.json());
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     }
     setLoading(false);
   }, [fetchShipments, fetchAnomalies, selectedShipment, token, authHeaders]);
@@ -129,17 +115,18 @@ export default function Home() {
     if (!isAuthenticated) return;
     fetchShipments();
     fetchAnomalies();
-    const interval = setInterval(() => {
-      fetchShipments();
-      fetchAnomalies();
-    }, 10000);
+    const interval = setInterval(() => { fetchShipments(); fetchAnomalies(); }, 10000);
     return () => clearInterval(interval);
   }, [isAuthenticated, fetchShipments, fetchAnomalies]);
 
   if (authLoading) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--bg-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "var(--text-muted)", fontSize: "14px" }}>Loading...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-float">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-2xl font-extrabold text-white shadow-lg shadow-blue-500/20">
+            S
+          </div>
+        </div>
       </div>
     );
   }
@@ -147,97 +134,45 @@ export default function Home() {
   if (!isAuthenticated || !user || !role) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", display: "flex", flexDirection: "column" }}>
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header
-        style={{
-          background: "var(--bg-secondary)",
-          borderBottom: "1px solid var(--border-color)",
-          padding: "16px 32px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div
-            style={{
-              width: 40, height: 40, borderRadius: "var(--radius-sm)",
-              background: "var(--gradient-primary)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "20px", fontWeight: 800, color: "white",
-            }}
-          >
+      <header className="bg-card/80 backdrop-blur-xl border-b border-border/50 px-8 py-3.5 flex items-center justify-between sticky top-0 z-50 shadow-sm shadow-black/5">
+        <div className="flex items-center gap-4">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-lg font-extrabold text-white shadow-md shadow-blue-500/25 transition-transform hover:scale-105 duration-200">
             S
           </div>
           <div>
-            <h1 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)", margin: 0, lineHeight: 1.2 }}>
-              Supply Daddy
-            </h1>
-            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }}>
-              Decentralized Logistics Platform
-            </p>
+            <h1 className="text-lg font-bold text-foreground leading-tight tracking-tight">Supply Daddy</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">Decentralized Logistics</p>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {/* Role Badge */}
-          <div
-            style={{
-              padding: "6px 14px", borderRadius: "20px",
-              background: "var(--bg-card)", border: "1px solid var(--accent-blue)",
-              display: "flex", alignItems: "center", gap: "6px",
-              fontSize: "13px", fontWeight: 600, color: "var(--accent-blue)",
-            }}
-          >
+        <div className="flex items-center gap-2.5">
+          <Badge variant="outline" className="gap-1.5 text-foreground/70 border-border/60 font-medium text-xs">
             <span>{roleLabels[role].icon}</span>
             {roleLabels[role].label}
-          </div>
+          </Badge>
 
-          {/* User */}
-          <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>
-            {user.username}
-          </span>
+          <span className="text-xs text-muted-foreground font-medium px-1">{user.username}</span>
 
-          <button
-            onClick={refreshAll}
-            style={{
-              padding: "8px 16px", borderRadius: "var(--radius-sm)",
-              background: "var(--bg-card)", border: "1px solid var(--border-color)",
-              color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: 500,
-              transition: "all 0.2s",
-            }}
-          >
+          <Button variant="ghost" size="sm" onClick={refreshAll} className="text-xs text-muted-foreground hover:text-foreground">
             {loading ? "⟳ Syncing..." : "↻ Refresh"}
-          </button>
+          </Button>
 
-          <button
+          <Button
+            size="sm"
             onClick={() => setGodModeOpen(!godModeOpen)}
-            style={{
-              padding: "8px 16px", borderRadius: "var(--radius-sm)",
-              background: godModeOpen ? "var(--gradient-god)" : "var(--bg-card)",
-              border: godModeOpen ? "none" : "1px solid var(--border-color)",
-              color: godModeOpen ? "white" : "var(--accent-purple)",
-              cursor: "pointer", fontSize: "13px", fontWeight: 600,
-            }}
+            className={`text-xs transition-all duration-300 ${godModeOpen
+                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30"
+                : "bg-secondary text-purple-400 hover:bg-secondary/80"
+              }`}
           >
             ⚡ God Mode
-          </button>
+          </Button>
 
-          <button
-            onClick={logout}
-            style={{
-              padding: "8px 16px", borderRadius: "var(--radius-sm)",
-              background: "var(--bg-card)", border: "1px solid var(--border-color)",
-              color: "var(--accent-red)", cursor: "pointer", fontSize: "13px", fontWeight: 500,
-            }}
-          >
+          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground hover:text-red-400">
             Logout
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -248,92 +183,36 @@ export default function Home() {
         </div>
       )}
 
-      {/* Main Content — role-based layout */}
-      <main
-        style={{
-          flex: 1, padding: "24px 32px",
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows: "auto auto",
-          gap: "24px",
-          maxWidth: "1600px", width: "100%", margin: "0 auto",
-        }}
-      >
-        {/* Manufacturer Layout */}
+      {/* Main Content */}
+      <main className="flex-1 p-6 grid grid-cols-2 gap-5 max-w-[1600px] w-full mx-auto">
         {role === "manufacturer" && (
           <>
-            <div>
-              <ShipmentPanel
-                shipments={shipments}
-                selectedShipment={selectedShipment}
-                onSelect={setSelectedShipment}
-                onCreated={refreshAll}
-                apiBase={API_BASE}
-                role={role}
-                token={token}
-              />
+            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
+              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
             </div>
-            <div>
-              <RouteGraph shipment={selectedShipment} />
-            </div>
-            <div>
-              <AlertsPanel anomalies={anomalies} />
-            </div>
-            <div>
-              <BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} />
-            </div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><RouteGraph shipment={selectedShipment} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} /></div>
           </>
         )}
-
-        {/* Transit Node Layout */}
         {role === "transit_node" && (
           <>
-            <div>
-              <ShipmentPanel
-                shipments={shipments}
-                selectedShipment={selectedShipment}
-                onSelect={setSelectedShipment}
-                onCreated={refreshAll}
-                apiBase={API_BASE}
-                role={role}
-                token={token}
-              />
+            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
+              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
             </div>
-            <div>
-              <ETATimeline shipment={selectedShipment} />
-            </div>
-            <div>
-              <AlertsPanel anomalies={anomalies} />
-            </div>
-            <div>
-              <BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} />
-            </div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><ETATimeline shipment={selectedShipment} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} /></div>
           </>
         )}
-
-        {/* Receiver Layout */}
         {role === "receiver" && (
           <>
-            <div>
-              <ShipmentPanel
-                shipments={shipments}
-                selectedShipment={selectedShipment}
-                onSelect={setSelectedShipment}
-                onCreated={refreshAll}
-                apiBase={API_BASE}
-                role={role}
-                token={token}
-              />
+            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
+              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
             </div>
-            <div>
-              <RouteGraph shipment={selectedShipment} />
-            </div>
-            <div>
-              <AlertsPanel anomalies={anomalies} />
-            </div>
-            <div>
-              <ETATimeline shipment={selectedShipment} />
-            </div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><RouteGraph shipment={selectedShipment} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
+            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><ETATimeline shipment={selectedShipment} /></div>
           </>
         )}
       </main>

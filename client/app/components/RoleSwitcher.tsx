@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import type { Role } from "../page";
+import { Button } from "./ui/button";
 
 interface Props {
     role: Role;
@@ -9,46 +10,29 @@ interface Props {
 
 const roles: { key: Role; label: string; icon: string }[] = [
     { key: "manufacturer", label: "Manufacturer", icon: "🏭" },
-    { key: "transit", label: "Transit Node", icon: "🚚" },
+    { key: "transit_node", label: "Transit Node", icon: "🚚" },
     { key: "receiver", label: "Receiver", icon: "📦" },
 ];
 
 export default function RoleSwitcher({ role, onRoleChange }: Props) {
     return (
-        <div
-            style={{
-                display: "flex",
-                gap: "4px",
-                background: "var(--bg-card)",
-                borderRadius: "var(--radius-sm)",
-                padding: "4px",
-                border: "1px solid var(--border-color)",
-            }}
-        >
+        <div className="flex gap-1 bg-card rounded-lg p-1 border border-border">
             {roles.map((r) => (
-                <button
+                <Button
                     key={r.key}
                     id={`role-${r.key}`}
+                    variant={role === r.key ? "default" : "ghost"}
+                    size="sm"
                     onClick={() => onRoleChange(r.key)}
-                    style={{
-                        padding: "6px 14px",
-                        borderRadius: "6px",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: role === r.key ? 600 : 400,
-                        color: role === r.key ? "white" : "var(--text-muted)",
-                        background:
-                            role === r.key ? "var(--gradient-primary)" : "transparent",
-                        transition: "all 0.2s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                    }}
+                    className={
+                        role === r.key
+                            ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white"
+                            : "text-muted-foreground"
+                    }
                 >
                     <span>{r.icon}</span>
                     {r.label}
-                </button>
+                </Button>
             ))}
         </div>
     );
