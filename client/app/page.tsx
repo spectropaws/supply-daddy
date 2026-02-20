@@ -1,63 +1,282 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import RoleSwitcher from "./components/RoleSwitcher";
+import ShipmentPanel from "./components/ShipmentPanel";
+import AlertsPanel from "./components/AlertsPanel";
+import BlockchainPanel from "./components/BlockchainPanel";
+import ETATimeline from "./components/ETATimeline";
+import GodMode from "./components/GodMode";
+
+const API_BASE = "http://localhost:8000";
+
+export type Role = "manufacturer" | "transit" | "receiver";
+
+export interface Shipment {
+  shipment_id: string;
+  origin: string;
+  destination: string;
+  route: RouteNode[];
+  risk_profile: RiskProfile | null;
+  current_status: string;
+  blockchain_tx_hashes: string[];
+  created_at?: string;
+}
+
+export interface RouteNode {
+  location_code: string;
+  name: string;
+  expected_arrival: string | null;
+  actual_arrival: string | null;
+  eta: string | null;
+}
+
+export interface RiskProfile {
+  product_category: string;
+  risk_flags: string[];
+  hazard_class: string | null;
+  compliance_required: string[];
+  confidence_score: number;
+}
+
+export interface Anomaly {
+  shipment_id: string;
+  anomaly_type: string;
+  severity: string;
+  details: Record<string, any>;
+  location_code: string;
+  resolved: boolean;
+  created_at: string;
+  genai_assessment?: {
+    risk_assessment: string;
+    business_impact: string;
+    recommended_action: string;
+    severity_level: string;
+  };
+}
 
 export default function Home() {
+  const [role, setRole] = useState<Role>("manufacturer");
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [godModeOpen, setGodModeOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchShipments = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/shipments/`);
+      if (res.ok) {
+        const data = await res.json();
+        setShipments(data);
+        if (data.length > 0 && !selectedShipment) {
+          setSelectedShipment(data[0]);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch shipments:", e);
+    }
+  }, [selectedShipment]);
+
+  const fetchAnomalies = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/anomalies`);
+      if (res.ok) {
+        setAnomalies(await res.json());
+      }
+    } catch (e) {
+      console.error("Failed to fetch anomalies:", e);
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchShipments(), fetchAnomalies()]);
+    // Refresh selected shipment
+    if (selectedShipment) {
+      try {
+        const res = await fetch(`${API_BASE}/shipments/${selectedShipment.shipment_id}`);
+        if (res.ok) setSelectedShipment(await res.json());
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setLoading(false);
+  }, [fetchShipments, fetchAnomalies, selectedShipment]);
+
+  useEffect(() => {
+    fetchShipments();
+    fetchAnomalies();
+    const interval = setInterval(() => {
+      fetchShipments();
+      fetchAnomalies();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [fetchShipments, fetchAnomalies]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--bg-primary)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header */}
+      <header
+        style={{
+          background: "var(--bg-secondary)",
+          borderBottom: "1px solid var(--border-color)",
+          padding: "16px 32px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: "var(--radius-sm)",
+              background: "var(--gradient-primary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "20px",
+              fontWeight: 800,
+              color: "white",
+            }}
+          >
+            S
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: "20px",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                margin: 0,
+                lineHeight: 1.2,
+              }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Supply Daddy
+            </h1>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                margin: 0,
+              }}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              Decentralized Logistics Platform
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <RoleSwitcher role={role} onRoleChange={setRole} />
+          <button
+            onClick={refreshAll}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 500,
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "var(--accent-blue)";
+              (e.target as HTMLButtonElement).style.color = "var(--accent-blue)";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "var(--border-color)";
+              (e.target as HTMLButtonElement).style.color = "var(--text-secondary)";
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            {loading ? "⟳ Syncing..." : "↻ Refresh"}
+          </button>
+          <button
+            onClick={() => setGodModeOpen(!godModeOpen)}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "var(--radius-sm)",
+              background: godModeOpen ? "var(--gradient-god)" : "var(--bg-card)",
+              border: godModeOpen ? "none" : "1px solid var(--border-color)",
+              color: godModeOpen ? "white" : "var(--accent-purple)",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 600,
+              transition: "all 0.2s",
+            }}
           >
-            Documentation
-          </a>
+            ⚡ God Mode
+          </button>
+        </div>
+      </header>
+
+      {/* God Mode Panel */}
+      {godModeOpen && (
+        <div className="animate-slide-down">
+          <GodMode
+            shipments={shipments}
+            onAction={refreshAll}
+            apiBase={API_BASE}
+          />
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main
+        style={{
+          flex: 1,
+          padding: "24px 32px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gridTemplateRows: "auto auto",
+          gap: "24px",
+          maxWidth: "1600px",
+          width: "100%",
+          margin: "0 auto",
+        }}
+      >
+        {/* Shipments Panel — spans full width on top for manufacturer */}
+        <div style={{ gridColumn: role === "manufacturer" ? "1 / -1" : "1 / 2" }}>
+          <ShipmentPanel
+            shipments={shipments}
+            selectedShipment={selectedShipment}
+            onSelect={setSelectedShipment}
+            onCreated={refreshAll}
+            apiBase={API_BASE}
+            role={role}
+          />
+        </div>
+
+        {/* Alerts Panel */}
+        <div style={{ gridColumn: role === "manufacturer" ? "1 / 2" : "2 / 3" }}>
+          <AlertsPanel anomalies={anomalies} />
+        </div>
+
+        {/* ETA Timeline */}
+        <div>
+          <ETATimeline shipment={selectedShipment} />
+        </div>
+
+        {/* Blockchain Panel */}
+        <div>
+          <BlockchainPanel
+            shipment={selectedShipment}
+            apiBase={API_BASE}
+          />
         </div>
       </main>
     </div>

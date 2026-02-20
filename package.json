@@ -1,0 +1,16 @@
+{
+  "name": "supply-daddy-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for Supply Daddy logistics platform",
+  "scripts": {
+    "compile": "hardhat compile",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.22.0"
+  }
+}
