@@ -41,7 +41,7 @@ export default function BlockchainPanel({ shipment, apiBase }: Props) {
                 <div className="flex flex-col gap-1.5">
                     {txHashes.map((hash, i) => (
                         <div
-                            key={hash}
+                            key={`tx-${i}`}
                             className="animate-fade-in flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary/40 transition-all duration-200 hover:bg-secondary/60 group"
                             style={{ animationDelay: `${i * 40}ms` }}
                         >

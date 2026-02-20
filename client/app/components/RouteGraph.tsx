@@ -183,8 +183,8 @@ export default function RouteGraph({ shipment }: Props) {
     }, [graphData, shipment]);
 
     return (
-        <Card>
-            <CardHeader className="pb-4">
+        <Card className="h-full flex flex-col">
+            <CardHeader className="pb-4 shrink-0">
                 <CardTitle className="flex items-center gap-2 text-base">
                     🗺️ Route Network
                     {shipment && (
@@ -194,8 +194,8 @@ export default function RouteGraph({ shipment }: Props) {
                     )}
                 </CardTitle>
             </CardHeader>
-            <CardContent>
-                <div className="h-[420px] rounded-lg overflow-hidden bg-background">
+            <CardContent className="flex-1 min-h-0">
+                <div className="h-full rounded-lg overflow-hidden bg-background">
                     {flowNodes.length > 0 ? (
                         <ReactFlow
                             nodes={flowNodes}
