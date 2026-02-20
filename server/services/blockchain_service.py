@@ -148,3 +148,56 @@ async def get_checkpoints(shipment_id: str) -> list[dict]:
     except Exception as e:
         logger.error(f"Blockchain read error: {e}")
         return []
+
+
+async def verify_checkpoint_hash(
+    shipment_id: str,
+    expected_hash: bytes,
+) -> dict:
+    """
+    Verify a document hash against the LATEST checkpoint stored on-chain.
+    Returns {"verified": bool, "on_chain_hash": str | None, "expected_hash": str}.
+    """
+    expected_hex = expected_hash[:32].hex()
+
+    if _contract is None or _w3 is None:
+        # Stub: assume verified if blockchain not available
+        return {
+            "verified": True,
+            "on_chain_hash": None,
+            "expected_hash": expected_hex,
+            "status": "stubbed",
+        }
+
+    try:
+        count = _contract.functions.getCheckpointCount(shipment_id).call()
+        if count == 0:
+            # No previous checkpoint → first checkpoint, auto-verified
+            return {
+                "verified": True,
+                "on_chain_hash": None,
+                "expected_hash": expected_hex,
+                "status": "first_checkpoint",
+            }
+
+        # Get the latest on-chain checkpoint
+        latest = _contract.functions.getCheckpoint(shipment_id, count - 1).call()
+        on_chain_hash = latest[3].hex()  # documentHash is at index 3
+
+        verified = on_chain_hash == expected_hex
+
+        return {
+            "verified": verified,
+            "on_chain_hash": on_chain_hash,
+            "expected_hash": expected_hex,
+            "status": "verified" if verified else "hash_mismatch",
+        }
+    except Exception as e:
+        logger.error(f"Hash verification error: {e}")
+        return {
+            "verified": False,
+            "on_chain_hash": None,
+            "expected_hash": expected_hex,
+            "status": "error",
+            "error": str(e),
+        }

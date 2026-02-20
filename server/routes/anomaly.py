@@ -1,7 +1,9 @@
 """
 Anomaly routes — List anomalies and God Mode injection endpoints.
+GenAI calls are wrapped with timeouts to prevent blocking.
 """
 
+import asyncio
 import hashlib
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
@@ -29,6 +31,17 @@ async def list_anomalies(shipment_id: str):
 async def list_all_anomalies():
     """Get all anomalies across all shipments."""
     return await firebase_service.get_all_anomalies()
+
+
+async def _safe_genai(context: dict, timeout: float = 5.0) -> dict | None:
+    """Call GenAI interpret_anomaly with a timeout to prevent blocking."""
+    try:
+        return await asyncio.wait_for(
+            genai_service.interpret_anomaly(context),
+            timeout=timeout,
+        )
+    except (asyncio.TimeoutError, Exception):
+        return None
 
 
 # ─── God Mode Endpoints ──────────────────────────────────
@@ -68,19 +81,22 @@ async def inject_delay(payload: GodModeDelay):
         payload.shipment_id, {"route": updated_route}
     )
 
-    # Process anomalies
+    # Process anomalies (with timeout on GenAI)
     genai_assessments = []
     for anomaly in anomalies:
         anomaly_dict = anomaly.model_dump(mode="json")
         await firebase_service.add_anomaly(anomaly_dict)
 
-        assessment = await genai_service.interpret_anomaly({
+        assessment = await _safe_genai({
             "product_category": product_category,
             "anomaly": anomaly.anomaly_type,
             "delay_hours": payload.delay_hours,
             "location": node.get("location_code", "unknown"),
         })
-        genai_assessments.append(assessment)
+        if assessment:
+            genai_assessments.append(assessment)
+            anomaly_dict["genai_assessment"] = assessment
+            await firebase_service.add_anomaly(anomaly_dict)
 
     return {
         "status": "delay_injected",
@@ -128,14 +144,17 @@ async def inject_temperature(payload: GodModeTemperature):
         anomaly_dict = anomaly.model_dump(mode="json")
         await firebase_service.add_anomaly(anomaly_dict)
 
-        assessment = await genai_service.interpret_anomaly({
+        assessment = await _safe_genai({
             "product_category": product_category,
             "anomaly": anomaly.anomaly_type,
             "observed_temperature": payload.observed_temperature,
             "allowed_range": anomaly.details.get("allowed_range", ""),
             "location": payload.location_code,
         })
-        genai_assessments.append(assessment)
+        if assessment:
+            genai_assessments.append(assessment)
+            anomaly_dict["genai_assessment"] = assessment
+            await firebase_service.add_anomaly(anomaly_dict)
 
     return {
         "status": "temperature_breach_injected",
@@ -188,14 +207,17 @@ async def inject_weight_loss(payload: GodModeWeight):
         anomaly_dict = anomaly.model_dump(mode="json")
         await firebase_service.add_anomaly(anomaly_dict)
 
-        assessment = await genai_service.interpret_anomaly({
+        assessment = await _safe_genai({
             "product_category": product_category,
             "anomaly": anomaly.anomaly_type,
             "observed_weight_kg": payload.observed_weight_kg,
             "expected_weight_kg": expected_weight,
             "location": payload.location_code,
         })
-        genai_assessments.append(assessment)
+        if assessment:
+            genai_assessments.append(assessment)
+            anomaly_dict["genai_assessment"] = assessment
+            await firebase_service.add_anomaly(anomaly_dict)
 
     return {
         "status": "weight_loss_injected",

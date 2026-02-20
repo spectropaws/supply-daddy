@@ -208,6 +208,19 @@ async def get_user_by_email(email: str) -> dict | None:
     return None
 
 
+async def get_user_by_firebase_uid(firebase_uid: str) -> dict | None:
+    """Find a user by Firebase UID."""
+    if _db:
+        docs = _db.collection("users").where("firebase_uid", "==", firebase_uid).limit(1).stream()
+        for doc in docs:
+            return doc.to_dict()
+        return None
+    for u in _mem_store["users"].values():
+        if u.get("firebase_uid") == firebase_uid:
+            return u
+    return None
+
+
 async def list_users_by_role(role: str) -> list[dict]:
     """List all users with a specific role."""
     if _db:
