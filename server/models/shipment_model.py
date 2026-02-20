@@ -26,7 +26,8 @@ class ShipmentCreate(BaseModel):
     shipment_id: str = Field(..., description="Unique shipment identifier")
     origin: str
     destination: str
-    route: list[RouteNode]
+    receiver_id: str = Field(..., description="User ID of the receiver")
+    route: list[RouteNode] = Field(default=[], description="If empty, auto-generated from origin/destination")
     po_text: Optional[str] = None
     invoice_text: Optional[str] = None
     bol_text: Optional[str] = None
@@ -37,6 +38,8 @@ class ShipmentResponse(BaseModel):
     shipment_id: str
     origin: str
     destination: str
+    manufacturer_id: str = ""
+    receiver_id: str = ""
     route: list[RouteNode]
     risk_profile: Optional[RiskProfile] = None
     current_status: str = "created"

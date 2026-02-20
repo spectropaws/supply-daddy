@@ -27,6 +27,7 @@ _mem_store: dict[str, dict[str, dict]] = {
     "shipments": {},
     "telemetry": {},
     "anomalies": {},
+    "users": {},
 }
 
 
@@ -173,3 +174,44 @@ async def resolve_anomaly(shipment_id: str, anomaly_type: str) -> bool:
             if v.get("shipment_id") == shipment_id and v.get("anomaly_type") == anomaly_type:
                 v["resolved"] = True
         return True
+
+
+# ─── Users ────────────────────────────────────────────────
+
+async def create_user(user_id: str, data: dict) -> dict:
+    """Create a user document."""
+    if _db:
+        _db.collection("users").document(user_id).set(data)
+    else:
+        _mem_store["users"][user_id] = data
+    return data
+
+
+async def get_user(user_id: str) -> dict | None:
+    """Retrieve a user by ID."""
+    if _db:
+        doc = _db.collection("users").document(user_id).get()
+        return doc.to_dict() if doc.exists else None
+    return _mem_store["users"].get(user_id)
+
+
+async def get_user_by_email(email: str) -> dict | None:
+    """Find a user by email."""
+    if _db:
+        docs = _db.collection("users").where("email", "==", email).limit(1).stream()
+        for doc in docs:
+            return doc.to_dict()
+        return None
+    for u in _mem_store["users"].values():
+        if u.get("email") == email:
+            return u
+    return None
+
+
+async def list_users_by_role(role: str) -> list[dict]:
+    """List all users with a specific role."""
+    if _db:
+        docs = _db.collection("users").where("role", "==", role).stream()
+        return [doc.to_dict() for doc in docs]
+    return [u for u in _mem_store["users"].values() if u.get("role") == role]
+
