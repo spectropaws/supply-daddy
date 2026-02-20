@@ -1,9 +1,7 @@
 """
-GenAI Service — Gemini integration for:
+GenAI Service — MegaLLM integration for:
 1. Shipment document classification/reconciliation
 2. Anomaly interpretation
-
-GenAI is ONLY triggered for these two events, never on routine check-ins.
 """
 
 import json
@@ -12,28 +10,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Try to import google genai — stub if unavailable
 try:
-    from google import genai
+    from openai import OpenAI
     _HAS_GENAI = True
 except ImportError:
     _HAS_GENAI = False
-    logger.warning("google-genai not installed — using stub responses")
+    logger.warning("openai not installed — using stub responses")
 
 
 def _get_client():
-    """Create Gemini client."""
+    """Create MegaLLM client via OpenAI SDK."""
     if not _HAS_GENAI:
         return None
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key:
-        logger.warning("GEMINI_API_KEY not set — using stub responses")
+    api_key = os.getenv("MEGALLM_API_KEY", "")
+    if not api_key or api_key == "your_megallm_api_key_here":
+        logger.warning("MEGALLM_API_KEY not set — using stub responses")
         return None
-    return genai.Client(api_key=api_key)
+    
+    return OpenAI(
+        base_url="https://ai.megallm.io/v1",
+        api_key=api_key
+    )
 
 
 def _parse_json_response(text: str) -> dict:
-    """Extract JSON from Gemini response (handles markdown code fences)."""
+    """Extract JSON from response (handles markdown code fences)."""
     cleaned = text.strip()
     if cleaned.startswith("```"):
         lines = cleaned.split("\n")
@@ -58,7 +59,6 @@ async def classify_shipment(
     client = _get_client()
 
     if client is None:
-        # Stub response for development
         return {
             "product_category": "pharmaceutical",
             "risk_flags": ["temperature_sensitive"],
@@ -78,7 +78,7 @@ async def classify_shipment(
 == BILL OF LADING ==
 {bol_text}
 
-Respond ONLY with a JSON object in this exact format:
+Respond ONLY with a JSON object in this exact format, no markdown formatting or extra text:
 {{
   "product_category": "<one of: pharmaceutical, food_grain, lithium_battery, electronics, or a custom category>",
   "risk_flags": ["<list of risk flags like temperature_sensitive, fragile, hazardous>"],
@@ -88,13 +88,16 @@ Respond ONLY with a JSON object in this exact format:
 }}"""
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
+        response = client.chat.completions.create(
+            model="gpt-5",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
         )
-        return _parse_json_response(response.text)
+        return _parse_json_response(response.choices[0].message.content)
     except Exception as e:
-        logger.error(f"Gemini classification error: {e}")
+        logger.error(f"MegaLLM classification error: {e}")
         return {
             "product_category": "default",
             "risk_flags": [],
@@ -112,7 +115,6 @@ async def interpret_anomaly(anomaly_context: dict) -> dict:
     client = _get_client()
 
     if client is None:
-        # Stub response for development
         return {
             "risk_assessment": f"Anomaly {anomaly_context.get('anomaly', 'UNKNOWN')} detected — "
                               f"potential compliance violation for {anomaly_context.get('product_category', 'unknown')} shipment.",
@@ -128,7 +130,7 @@ async def interpret_anomaly(anomaly_context: dict) -> dict:
 Anomaly Context:
 {json.dumps(anomaly_context, indent=2)}
 
-Respond ONLY with a JSON object in this exact format:
+Respond ONLY with a JSON object in this exact format, no markdown formatting or extra text:
 {{
   "risk_assessment": "<detailed risk assessment>",
   "business_impact": "<business impact description>",
@@ -137,13 +139,16 @@ Respond ONLY with a JSON object in this exact format:
 }}"""
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
+        response = client.chat.completions.create(
+            model="gpt-5",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
         )
-        return _parse_json_response(response.text)
+        return _parse_json_response(response.choices[0].message.content)
     except Exception as e:
-        logger.error(f"Gemini anomaly interpretation error: {e}")
+        logger.error(f"MegaLLM anomaly interpretation error: {e}")
         return {
             "risk_assessment": "Unable to generate AI assessment.",
             "business_impact": "Unknown",
