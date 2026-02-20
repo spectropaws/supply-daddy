@@ -4,7 +4,7 @@
  * Also works transparently with any other backend URL (localhost, production, etc).
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 function isNgrokUrl(url: string): boolean {
   try {
