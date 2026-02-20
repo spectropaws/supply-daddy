@@ -193,7 +193,7 @@ export default function Home() {
         paused={godModeOpen}
         token={token}
         onCheckpointComplete={refreshAll}
-        intervalSeconds={20}
+        secondsPerHour={1}
       />
 
       {/* God Mode Panel */}
@@ -203,38 +203,35 @@ export default function Home() {
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 grid grid-cols-2 gap-5 max-w-[1600px] w-full mx-auto">
-        {role === "manufacturer" && (
-          <>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
-              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
+      {/* Main Content — 3-column: sidebar / hero graph / sidebar */}
+      <main className="flex-1 p-5 max-w-[1800px] w-full mx-auto">
+        <div className="grid grid-cols-[320px_1fr_340px] gap-4 h-[calc(100vh-120px)]">
+
+          {/* Left Sidebar — Shipments */}
+          <div className="animate-fade-in-scale overflow-y-auto">
+            <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
+          </div>
+
+          {/* Center — Route Graph (hero) */}
+          <div className="animate-fade-in-scale flex flex-col gap-4" style={{ animationDelay: '50ms' }}>
+            <div className="flex-1 min-h-[500px]">
+              <RouteGraph shipment={selectedShipment} />
             </div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><RouteGraph shipment={selectedShipment} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} /></div>
-          </>
-        )}
-        {role === "transit_node" && (
-          <>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
-              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
-            </div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><ETATimeline shipment={selectedShipment} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} /></div>
-          </>
-        )}
-        {role === "receiver" && (
-          <>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '0ms' }}>
-              <ShipmentPanel shipments={shipments} selectedShipment={selectedShipment} onSelect={setSelectedShipment} onCreated={refreshAll} apiBase={API_BASE} role={role} token={token} />
-            </div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '50ms' }}><RouteGraph shipment={selectedShipment} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '100ms' }}><AlertsPanel anomalies={anomalies} /></div>
-            <div className="animate-fade-in-scale" style={{ animationDelay: '150ms' }}><ETATimeline shipment={selectedShipment} /></div>
-          </>
-        )}
+            {/* ETA Timeline sits below the graph for transit/receiver roles */}
+            {(role === "transit_node" || role === "receiver") && (
+              <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+                <ETATimeline shipment={selectedShipment} />
+              </div>
+            )}
+          </div>
+
+          {/* Right Sidebar — Alerts + Blockchain/ETA stacked */}
+          <div className="flex flex-col gap-4 overflow-y-auto animate-fade-in-scale" style={{ animationDelay: '100ms' }}>
+            <AlertsPanel anomalies={anomalies} />
+            <BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} />
+          </div>
+
+        </div>
       </main>
     </div>
   );
