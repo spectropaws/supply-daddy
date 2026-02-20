@@ -94,10 +94,12 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         setShipments(data);
-        if (data.length > 0 && !selectedShipment) setSelectedShipment(data[0]);
+        if (data.length > 0) {
+          setSelectedShipment(prev => prev || data[0]);
+        }
       }
     } catch (e) { console.error("Failed to fetch shipments:", e); }
-  }, [token, authHeaders, selectedShipment]);
+  }, [token, authHeaders]);
 
   const fetchAnomalies = useCallback(async () => {
     try {
@@ -122,8 +124,7 @@ export default function Home() {
     if (!isAuthenticated) return;
     fetchShipments();
     fetchAnomalies();
-    const interval = setInterval(() => { fetchShipments(); fetchAnomalies(); }, 10000);
-    return () => clearInterval(interval);
+    // Background 10s polling removed per request
   }, [isAuthenticated, fetchShipments, fetchAnomalies]);
 
   if (authLoading) {
