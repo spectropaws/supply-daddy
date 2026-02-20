@@ -214,9 +214,7 @@ export default function Home() {
 
           {/* Center — Route Graph (hero) */}
           <div className="animate-fade-in-scale flex flex-col gap-4" style={{ animationDelay: '50ms' }}>
-            <div className="flex-1 min-h-[500px]">
-              <RouteGraph shipment={selectedShipment} />
-            </div>
+            <RouteGraph shipment={selectedShipment} />
             {/* ETA Timeline sits below the graph for transit/receiver roles */}
             {(role === "transit_node" || role === "receiver") && (
               <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
@@ -225,8 +223,8 @@ export default function Home() {
             )}
           </div>
 
-          {/* Right Sidebar — Alerts + Blockchain/ETA stacked */}
-          <div className="flex flex-col gap-4 overflow-y-auto animate-fade-in-scale" style={{ animationDelay: '100ms' }}>
+          {/* Right Sidebar */}
+          <div className="flex flex-col gap-4 animate-fade-in-scale" style={{ animationDelay: '100ms' }}>
             <AlertsPanel anomalies={anomalies} />
             <BlockchainPanel shipment={selectedShipment} apiBase={API_BASE} />
           </div>
