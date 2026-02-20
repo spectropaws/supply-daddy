@@ -1,64 +1,136 @@
 """
-Checkpoint routes — Register transit node check-ins.
+Checkpoint routes — Register transit node check-ins with document hash verification.
+
+At every node:
+1. Recompute SHA-256 from the shipment's current document texts
+2. Compare with the hash anchored on blockchain (from creation or last checkpoint)
+3. If mismatch → flag `document_tampered` anomaly (someone modified the docs)
+4. Anchor the current hash on blockchain for the next node to verify
+5. Advance shipment through the route
 """
 
 import hashlib
-from datetime import datetime
-from fastapi import APIRouter
+from datetime import datetime, timezone
+from fastapi import APIRouter, HTTPException, Depends
 from models.telemetry_model import CheckpointInput
 from services import firebase_service, blockchain_service, genai_service
 from services.risk_engine import evaluate_checkpoint
 from services.eta_engine import propagate_delay
+from services.auth_middleware import get_current_user, UserContext
 
 router = APIRouter(prefix="/checkpoints", tags=["Checkpoints"])
 
 
-@router.post("/", response_model=dict)
-async def register_checkpoint(checkpoint: CheckpointInput):
-    """
-    Register a checkpoint from a transit node.
+def compute_doc_hash(po_text: str, invoice_text: str, bol_text: str) -> bytes:
+    """Same deterministic hash as used at shipment creation."""
+    combined = f"PO:{po_text}|INV:{invoice_text}|BOL:{bol_text}"
+    return hashlib.sha256(combined.encode("utf-8")).digest()
 
-    1. Fetch shipment risk profile
-    2. Evaluate deterministic anomaly rules
-    3. If clean → store telemetry + anchor on blockchain
-    4. If anomaly → store anomaly + trigger GenAI interpretation
+
+@router.post("/", response_model=dict)
+async def register_checkpoint(
+    checkpoint: CheckpointInput,
+    user: UserContext = Depends(get_current_user),
+):
     """
-    # Fetch shipment
+    Register a checkpoint at a transit node.
+    Verifies document integrity via blockchain hash comparison.
+    """
+    # ─── Fetch shipment ─────────────────────────────────
     shipment = await firebase_service.get_shipment(checkpoint.shipment_id)
     if not shipment:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Shipment not found")
 
+    if shipment.get("current_status") == "delivered":
+        raise HTTPException(status_code=400, detail="Shipment already delivered")
+
+    route = shipment.get("route", [])
     risk_profile = shipment.get("risk_profile", {})
     product_category = risk_profile.get("product_category", "default")
 
-    # Calculate delay if we can match the route node
-    delay_hours = 0.0
+    # ─── Find node in route ─────────────────────────────
     node_index = -1
-    route = shipment.get("route", [])
     for i, node in enumerate(route):
         if node.get("location_code") == checkpoint.location_code:
             node_index = i
-            if node.get("expected_arrival"):
-                try:
-                    expected = datetime.fromisoformat(node["expected_arrival"])
-                    actual = checkpoint.timestamp or datetime.utcnow()
-                    delta = (actual - expected).total_seconds() / 3600
-                    if delta > 0:
-                        delay_hours = delta
-                except (ValueError, TypeError):
-                    pass
-            # Update actual arrival
-            node["actual_arrival"] = (checkpoint.timestamp or datetime.utcnow()).isoformat()
             break
 
-    # Find expected weight from first checkpoint or shipment data
+    if node_index == -1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Location {checkpoint.location_code} is not on this shipment's route",
+        )
+
+    # Enforce in-order traversal
+    for i in range(node_index):
+        if not route[i].get("actual_arrival"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot check in at {checkpoint.location_code} — "
+                       f"previous node {route[i]['location_code']} not visited yet",
+            )
+
+    if route[node_index].get("actual_arrival"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Checkpoint at {checkpoint.location_code} already recorded",
+        )
+
+    # ─── Document hash verification ─────────────────────
+    # Recompute hash from current document texts
+    current_hash = compute_doc_hash(
+        shipment.get("po_text", ""),
+        shipment.get("invoice_text", ""),
+        shipment.get("bol_text", ""),
+    )
+    current_hash_hex = current_hash.hex()
+
+    # Compare with on-chain hash
+    hash_verification = await blockchain_service.verify_checkpoint_hash(
+        shipment_id=checkpoint.shipment_id,
+        expected_hash=current_hash,
+    )
+
+    tamper_detected = False
+    if not hash_verification.get("verified", True):
+        tamper_detected = True
+        anomaly_data = {
+            "shipment_id": checkpoint.shipment_id,
+            "anomaly_type": "document_tampered",
+            "severity": "critical",
+            "details": {
+                "expected_hash": hash_verification.get("on_chain_hash"),
+                "current_hash": current_hash_hex,
+                "location": checkpoint.location_code,
+                "message": "Document texts have been modified since the last checkpoint. "
+                           "The SHA-256 hash does not match the on-chain record. "
+                           "Possible tampering or unauthorized modification detected.",
+            },
+            "location_code": checkpoint.location_code,
+            "resolved": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await firebase_service.add_anomaly(anomaly_data)
+
+    # ─── Calculate delay ────────────────────────────────
+    now = checkpoint.timestamp or datetime.now(timezone.utc)
+    delay_seconds = 0.0
+
+    if route[node_index].get("expected_arrival"):
+        try:
+            expected = datetime.fromisoformat(route[node_index]["expected_arrival"])
+            delta = (now - expected).total_seconds()
+            if delta > 0:
+                delay_seconds = delta
+        except (ValueError, TypeError):
+            pass
+
+    # ─── Deterministic anomaly rules ────────────────────
     expected_weight = None
     telemetry_records = await firebase_service.get_telemetry(checkpoint.shipment_id)
     if telemetry_records:
         expected_weight = telemetry_records[0].get("weight_kg")
 
-    # Evaluate anomaly rules
     anomalies = evaluate_checkpoint(
         shipment_id=checkpoint.shipment_id,
         product_category=product_category,
@@ -67,76 +139,78 @@ async def register_checkpoint(checkpoint: CheckpointInput):
         humidity=checkpoint.humidity,
         weight_kg=checkpoint.weight_kg,
         expected_weight_kg=expected_weight,
-        delay_hours=delay_hours,
+        delay_hours=delay_seconds / 3600,
     )
 
-    # Store telemetry
+    # ─── Store telemetry ────────────────────────────────
     telemetry_data = {
         "location_code": checkpoint.location_code,
         "temperature": checkpoint.temperature,
         "humidity": checkpoint.humidity,
         "weight_kg": checkpoint.weight_kg,
-        "timestamp": (checkpoint.timestamp or datetime.utcnow()).isoformat(),
+        "timestamp": now.isoformat(),
+        "scanned_by": user.user_id,
     }
     await firebase_service.add_telemetry(checkpoint.shipment_id, telemetry_data)
 
-    # Anchor on blockchain
-    doc_hash = hashlib.sha256(
-        f"{checkpoint.shipment_id}:{checkpoint.location_code}".encode()
-    ).digest()
+    # ─── Anchor current hash on blockchain ──────────────
+    # This anchors the CURRENT document hash so the next node can verify it
     tx_result = await blockchain_service.append_checkpoint(
         shipment_id=checkpoint.shipment_id,
         location_code=checkpoint.location_code,
         weight_kg=int(checkpoint.weight_kg),
-        document_hash=doc_hash,
+        document_hash=current_hash,
     )
 
-    # Update shipment tx hashes
+    # ─── Advance shipment ───────────────────────────────
+    route[node_index]["actual_arrival"] = now.isoformat()
+
+    tx_hashes = shipment.get("blockchain_tx_hashes", [])
     if tx_result.get("tx_hash"):
-        tx_hashes = shipment.get("blockchain_tx_hashes", [])
         tx_hashes.append(tx_result["tx_hash"])
-        await firebase_service.update_shipment(
-            checkpoint.shipment_id, {"blockchain_tx_hashes": tx_hashes}
-        )
 
-    # ETA propagation if there's a delay
-    if delay_hours > 0 and node_index >= 0:
-        updated_route = propagate_delay(route, node_index, delay_hours)
-        await firebase_service.update_shipment(
-            checkpoint.shipment_id,
-            {"route": updated_route, "current_status": "in_transit"},
-        )
-    elif node_index >= 0:
-        await firebase_service.update_shipment(
-            checkpoint.shipment_id,
-            {"route": route, "current_status": "in_transit"},
-        )
+    is_final = node_index == len(route) - 1
+    new_status = "delivered" if is_final else "in_transit"
 
-    # Process anomalies
-    genai_assessments = []
+    if delay_seconds > 0 and not is_final:
+        updated_route = propagate_delay(route, node_index, delay_seconds / 3600)
+    else:
+        updated_route = route
+
+    await firebase_service.update_shipment(
+        checkpoint.shipment_id,
+        {
+            "route": updated_route,
+            "current_status": new_status,
+            "blockchain_tx_hashes": tx_hashes,
+        },
+    )
+
+    # ─── Process telemetry anomalies (skip GenAI to avoid blocking) ──
+    anomaly_list = []
     for anomaly in anomalies:
         anomaly_dict = anomaly.model_dump(mode="json")
         await firebase_service.add_anomaly(anomaly_dict)
-
-        # Trigger GenAI for anomaly interpretation
-        genai_context = {
-            "product_category": product_category,
-            "anomaly": anomaly.anomaly_type,
-            "location": checkpoint.location_code,
-            **anomaly.details,
-        }
-        assessment = await genai_service.interpret_anomaly(genai_context)
-        genai_assessments.append(assessment)
-
-        # Update anomaly with GenAI assessment
-        anomaly_dict["genai_assessment"] = assessment
-        await firebase_service.add_anomaly(anomaly_dict)
+        anomaly_list.append(anomaly_dict)
 
     return {
-        "status": "anomaly_detected" if anomalies else "ok",
+        "status": "delivered" if is_final
+                  else "tamper_detected" if tamper_detected
+                  else "anomaly_detected" if anomalies
+                  else "transferred",
+        "node_index": node_index,
+        "location": checkpoint.location_code,
+        "is_final_destination": is_final,
+        "shipment_status": new_status,
         "checkpoint": telemetry_data,
         "blockchain_tx": tx_result,
-        "anomalies": [a.model_dump(mode="json") for a in anomalies],
-        "genai_assessments": genai_assessments,
-        "delay_hours": delay_hours,
+        "hash_verification": {
+            "current_hash": current_hash_hex,
+            "on_chain_hash": hash_verification.get("on_chain_hash"),
+            "verified": hash_verification.get("verified"),
+            "status": hash_verification.get("status"),
+            "tamper_detected": tamper_detected,
+        },
+        "anomalies": anomaly_list,
+        "delay_seconds": delay_seconds,
     }

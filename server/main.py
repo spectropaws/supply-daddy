@@ -65,6 +65,7 @@ app.include_router(anomaly.router)
 app.include_router(route.router)
 
 
+
 @app.get("/")
 async def root():
     return {

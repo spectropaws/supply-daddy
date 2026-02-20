@@ -26,7 +26,7 @@ interface Props {
     shipment: Shipment | null;
 }
 
-/* Custom node — kept with inline styles for ReactFlow compatibility */
+/* Custom node with handles on all 4 sides for clean edge routing */
 function TransitNode({ data }: { data: { label: string; code: string; status: string } }) {
     const colorMap: Record<string, string> = {
         visited: "#10b981",
@@ -37,9 +37,20 @@ function TransitNode({ data }: { data: { label: string; code: string; status: st
     const color = colorMap[data.status] || colorMap.default;
     const isCurrent = data.status === "current";
 
+    const hiddenHandle: React.CSSProperties = { visibility: "hidden", width: 1, height: 1 };
+
     return (
         <>
-            <Handle type="target" position={Position.Top} style={{ visibility: "hidden" }} />
+            {/* Source handles (edge exits from here) */}
+            <Handle type="source" position={Position.Top} id="s-top" style={hiddenHandle} />
+            <Handle type="source" position={Position.Bottom} id="s-bottom" style={hiddenHandle} />
+            <Handle type="source" position={Position.Left} id="s-left" style={hiddenHandle} />
+            <Handle type="source" position={Position.Right} id="s-right" style={hiddenHandle} />
+            {/* Target handles (edge enters here) */}
+            <Handle type="target" position={Position.Top} id="t-top" style={hiddenHandle} />
+            <Handle type="target" position={Position.Bottom} id="t-bottom" style={hiddenHandle} />
+            <Handle type="target" position={Position.Left} id="t-left" style={hiddenHandle} />
+            <Handle type="target" position={Position.Right} id="t-right" style={hiddenHandle} />
             <div
                 style={{
                     background: "hsl(var(--card))",
@@ -59,9 +70,28 @@ function TransitNode({ data }: { data: { label: string; code: string; status: st
                     {data.label}
                 </div>
             </div>
-            <Handle type="source" position={Position.Bottom} style={{ visibility: "hidden" }} />
         </>
     );
+}
+
+/** Pick the best source/target handles based on relative node positions. */
+function getHandles(
+    srcNode: { x: number; y: number },
+    tgtNode: { x: number; y: number },
+): { sourceHandle: string; targetHandle: string } {
+    const dx = tgtNode.x - srcNode.x;
+    const dy = tgtNode.y - srcNode.y;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+        // Primarily horizontal
+        return dx > 0
+            ? { sourceHandle: "s-right", targetHandle: "t-left" }
+            : { sourceHandle: "s-left", targetHandle: "t-right" };
+    }
+    // Primarily vertical
+    return dy > 0
+        ? { sourceHandle: "s-bottom", targetHandle: "t-top" }
+        : { sourceHandle: "s-top", targetHandle: "t-bottom" };
 }
 
 const nodeTypes: NodeTypes = { transit: TransitNode };
@@ -80,14 +110,17 @@ export default function RouteGraph({ shipment }: Props) {
         if (!graphData) return { flowNodes: [], flowEdges: [] };
 
         const routeCodes = new Set(shipment?.route?.map((n) => n.location_code) || []);
-        const routeEdgeKeys = new Set<string>();
 
+        // Build a DIRECTED map: for each consecutive pair in the route,
+        // store the direction so we can orient edges correctly.
+        // Key: "A-B" (sorted), Value: { source: A, target: B }
+        const routeEdgeDir = new Map<string, { source: string; target: string }>();
         if (shipment?.route) {
             for (let i = 0; i < shipment.route.length - 1; i++) {
                 const a = shipment.route[i].location_code;
                 const b = shipment.route[i + 1].location_code;
-                routeEdgeKeys.add(`${a}-${b}`);
-                routeEdgeKeys.add(`${b}-${a}`);
+                const key = [a, b].sort().join("-");
+                routeEdgeDir.set(key, { source: a, target: b });
             }
         }
 
@@ -102,6 +135,9 @@ export default function RouteGraph({ shipment }: Props) {
             return "upcoming";
         };
 
+        // Build node position lookup (using scaled coords)
+        const nodePos = new Map(graphData.nodes.map((n) => [n.id, { x: n.x * 1.3, y: n.y * 1.1 }]));
+
         const flowNodes: Node[] = graphData.nodes.map((n) => ({
             id: n.id,
             type: "transit",
@@ -110,11 +146,25 @@ export default function RouteGraph({ shipment }: Props) {
         }));
 
         const flowEdges: Edge[] = graphData.edges.map((e) => {
-            const isActive = routeEdgeKeys.has(`${e.source}-${e.target}`);
+            const sortedKey = [e.source, e.target].sort().join("-");
+            const routeDir = routeEdgeDir.get(sortedKey);
+            const isActive = !!routeDir;
+
+            // If this edge is on the active route, orient it in the route's direction
+            const source = routeDir ? routeDir.source : e.source;
+            const target = routeDir ? routeDir.target : e.target;
+
+            // Pick handles based on relative positions so edges never wrap
+            const srcPos = nodePos.get(source) || { x: 0, y: 0 };
+            const tgtPos = nodePos.get(target) || { x: 0, y: 0 };
+            const handles = getHandles(srcPos, tgtPos);
+
             return {
                 id: `${e.source}-${e.target}`,
-                source: e.source,
-                target: e.target,
+                source,
+                target,
+                sourceHandle: handles.sourceHandle,
+                targetHandle: handles.targetHandle,
                 label: e.label,
                 style: {
                     stroke: isActive ? "#3b82f6" : "hsl(var(--border))",

@@ -8,9 +8,11 @@ import BlockchainPanel from "./components/BlockchainPanel";
 import ETATimeline from "./components/ETATimeline";
 import GodMode from "./components/GodMode";
 import RouteGraph from "./components/RouteGraph";
+import SimulationBar from "./components/SimulationBar";
 import { apiFetch, API_BASE } from "./lib/apiFetch";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { useTheme } from "./components/ThemeContext";
 
 export type Role = "manufacturer" | "transit_node" | "receiver";
 
@@ -25,6 +27,10 @@ export interface Shipment {
   current_status: string;
   blockchain_tx_hashes: string[];
   created_at?: string;
+  doc_hash?: string;
+  po_text?: string;
+  invoice_text?: string;
+  bol_text?: string;
 }
 
 export interface RouteNode {
@@ -67,6 +73,7 @@ const roleLabels: Record<Role, { label: string; icon: string }> = {
 
 export default function Home() {
   const { user, token, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
@@ -159,12 +166,16 @@ export default function Home() {
             {loading ? "⟳ Syncing..." : "↻ Refresh"}
           </Button>
 
+          <Button variant="ghost" size="sm" onClick={toggleTheme} className="text-xs text-muted-foreground hover:text-foreground w-8 h-8 p-0" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+            {theme === "dark" ? "☀️" : "🌙"}
+          </Button>
+
           <Button
             size="sm"
             onClick={() => setGodModeOpen(!godModeOpen)}
             className={`text-xs transition-all duration-300 ${godModeOpen
-                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30"
-                : "bg-secondary text-purple-400 hover:bg-secondary/80"
+              ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30"
+              : "bg-secondary text-purple-400 hover:bg-secondary/80"
               }`}
           >
             ⚡ God Mode
@@ -176,10 +187,19 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Simulation Bar — auto-transfers, pauses on God Mode */}
+      <SimulationBar
+        shipments={shipments}
+        paused={godModeOpen}
+        token={token}
+        onCheckpointComplete={refreshAll}
+        intervalSeconds={20}
+      />
+
       {/* God Mode Panel */}
       {godModeOpen && (
         <div className="animate-slide-down">
-          <GodMode shipments={shipments} onAction={refreshAll} apiBase={API_BASE} />
+          <GodMode shipments={shipments} onAction={refreshAll} apiBase={API_BASE} token={token} />
         </div>
       )}
 

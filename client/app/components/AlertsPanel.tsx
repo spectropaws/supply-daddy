@@ -4,10 +4,14 @@ import type { Anomaly } from "../page";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 const severityConfig: Record<string, { text: string; bg: string }> = {
+    critical: { text: "text-red-400", bg: "bg-red-500/8" },
     CRITICAL: { text: "text-red-400", bg: "bg-red-500/8" },
     HIGH: { text: "text-amber-400", bg: "bg-amber-500/8" },
+    high: { text: "text-amber-400", bg: "bg-amber-500/8" },
     MEDIUM: { text: "text-blue-400", bg: "bg-blue-500/8" },
+    medium: { text: "text-blue-400", bg: "bg-blue-500/8" },
     LOW: { text: "text-green-400", bg: "bg-green-500/8" },
+    low: { text: "text-green-400", bg: "bg-green-500/8" },
 };
 
 const anomalyLabels: Record<string, string> = {
@@ -15,12 +19,22 @@ const anomalyLabels: Record<string, string> = {
     WEIGHT_DEVIATION: "⚖️ Weight Deviation",
     DELAY: "⏱️ Delay",
     HUMIDITY_BREACH: "💧 Humidity Breach",
+    document_tampered: "🔓 Document Tampered",
+    hash_mismatch: "🔗 Hash Mismatch",
 };
 
 interface Props { anomalies: Anomaly[]; }
 
 export default function AlertsPanel({ anomalies }: Props) {
     const unresolvedAnomalies = anomalies.filter((a) => !a.resolved);
+
+    // Separate tamper anomalies for prominent display
+    const tamperAnomalies = unresolvedAnomalies.filter(
+        (a) => a.anomaly_type === "document_tampered" || a.anomaly_type === "hash_mismatch"
+    );
+    const otherAnomalies = unresolvedAnomalies.filter(
+        (a) => a.anomaly_type !== "document_tampered" && a.anomaly_type !== "hash_mismatch"
+    );
 
     return (
         <Card className="max-h-[500px] overflow-y-auto">
@@ -42,8 +56,53 @@ export default function AlertsPanel({ anomalies }: Props) {
                     </div>
                 )}
 
+                {/* Tamper alerts — displayed prominently */}
+                {tamperAnomalies.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                        {tamperAnomalies.map((a, i) => (
+                            <div
+                                key={`tamper-${a.shipment_id}-${i}`}
+                                className="animate-fade-in rounded-lg p-3 bg-red-500/10 border border-red-500/20 transition-all duration-200"
+                                style={{ animationDelay: `${i * 40}ms` }}
+                            >
+                                <div className="flex justify-between items-start mb-1.5">
+                                    <div>
+                                        <span className="text-[13px] font-semibold text-red-400">
+                                            🔓 Document Tampered
+                                        </span>
+                                        <span className="text-[11px] text-muted-foreground ml-2">{a.shipment_id}</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-red-400 bg-red-500/15 px-2 py-0.5 rounded animate-pulse">
+                                        CRITICAL
+                                    </span>
+                                </div>
+                                {a.location_code && (
+                                    <p className="text-[11px] text-muted-foreground">📍 Detected at: <strong className="text-red-300">{a.location_code}</strong></p>
+                                )}
+                                <p className="text-[11px] text-red-300/80 mt-1 leading-relaxed">
+                                    {a.details?.message || "Document hash does not match on-chain record. Possible tampering detected."}
+                                </p>
+                                {a.details?.expected_hash && a.details?.current_hash && (
+                                    <div className="mt-2 p-2 rounded bg-red-500/5 font-mono text-[10px] space-y-0.5">
+                                        <p className="text-muted-foreground">
+                                            On-chain: <span className="text-green-400">{String(a.details.expected_hash).slice(0, 16)}...</span>
+                                        </p>
+                                        <p className="text-muted-foreground">
+                                            Current:  <span className="text-red-400">{String(a.details.current_hash).slice(0, 16)}...</span>
+                                        </p>
+                                    </div>
+                                )}
+                                <p className="text-[10px] text-amber-400 mt-2 font-medium">
+                                    ⚠️ Manufacturer and receiver have been notified
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Other anomalies */}
                 <div className="flex flex-col gap-2">
-                    {unresolvedAnomalies.map((a, i) => {
+                    {otherAnomalies.map((a, i) => {
                         const sev = severityConfig[a.severity] || severityConfig.MEDIUM;
                         return (
                             <div

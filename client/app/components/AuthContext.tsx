@@ -2,6 +2,17 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import {
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signInWithPopup,
+    signOut,
+    sendPasswordResetEmail,
+    updateProfile,
+    type User as FirebaseUser,
+} from "firebase/auth";
+import { auth, googleProvider } from "../lib/firebase";
 import { apiFetch, API_BASE } from "../lib/apiFetch";
 
 export interface User {
@@ -15,16 +26,19 @@ export interface User {
 interface AuthContextType {
     user: User | null;
     token: string | null;
+    firebaseUser: FirebaseUser | null;
     isAuthenticated: boolean;
     loading: boolean;
+    needsRole: boolean;
     register: (data: {
         username: string;
         email: string;
         password: string;
-        role: string;
-        node_codes?: string[];
     }) => Promise<void>;
     login: (email: string, password: string) => Promise<void>;
+    loginWithGoogle: () => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
+    setupRole: (role: string, node_codes?: string[]) => Promise<void>;
     logout: () => void;
 }
 
@@ -38,93 +52,133 @@ export function useAuth(): AuthContextType {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [needsRole, setNeedsRole] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
 
-    // Verify stored token on mount
-    useEffect(() => {
-        const storedToken = localStorage.getItem("sd_token");
-        if (!storedToken) {
-            setLoading(false);
-            return;
-        }
+    // Sync backend profile from Firebase token
+    const syncProfile = useCallback(async (fbUser: FirebaseUser) => {
+        try {
+            const idToken = await fbUser.getIdToken();
+            setToken(idToken);
 
-        apiFetch(`${API_BASE}/auth/me`, {
-            headers: { Authorization: `Bearer ${storedToken}` },
-        })
-            .then((res) => {
-                if (!res.ok) throw new Error("Invalid token");
-                return res.json();
-            })
-            .then((data) => {
+            const res = await apiFetch(`${API_BASE}/auth/me`, {
+                headers: { Authorization: `Bearer ${idToken}` },
+            });
+
+            if (res.ok) {
+                const data = await res.json();
                 setUser(data);
-                setToken(storedToken);
-            })
-            .catch(() => {
-                localStorage.removeItem("sd_token");
-            })
-            .finally(() => setLoading(false));
+                setNeedsRole(false);
+                return true;
+            } else if (res.status === 404) {
+                // User exists in Firebase Auth but not in our DB → needs role setup
+                setNeedsRole(true);
+                return false;
+            } else {
+                throw new Error("Profile fetch failed");
+            }
+        } catch (e) {
+            console.error("syncProfile error:", e);
+            return false;
+        }
     }, []);
 
-    // Redirect unauthenticated users to login
+    // Listen to Firebase auth state
     useEffect(() => {
-        if (!loading && !user && pathname !== "/login") {
+        const unsub = onAuthStateChanged(auth, async (fbUser) => {
+            if (fbUser) {
+                setFirebaseUser(fbUser);
+                await syncProfile(fbUser);
+            } else {
+                setFirebaseUser(null);
+                setUser(null);
+                setToken(null);
+                setNeedsRole(false);
+            }
+            setLoading(false);
+        });
+        return unsub;
+    }, [syncProfile]);
+
+    // Redirect unauthenticated users
+    useEffect(() => {
+        if (!loading && !firebaseUser && pathname !== "/login") {
             router.push("/login");
         }
-    }, [loading, user, pathname, router]);
+    }, [loading, firebaseUser, pathname, router]);
 
     const register = useCallback(
-        async (data: {
-            username: string;
-            email: string;
-            password: string;
-            role: string;
-            node_codes?: string[];
-        }) => {
-            const res = await apiFetch(`${API_BASE}/auth/register`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || "Registration failed");
-            }
-            const result = await res.json();
-            setUser(result.user);
-            setToken(result.token);
-            localStorage.setItem("sd_token", result.token);
-            router.push("/");
+        async (data: { username: string; email: string; password: string }) => {
+            const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+            await updateProfile(cred.user, { displayName: data.username });
+            setFirebaseUser(cred.user);
+            // Don't navigate yet — needs role selection
+            const idToken = await cred.user.getIdToken();
+            setToken(idToken);
+            setNeedsRole(true);
         },
-        [router]
+        []
     );
 
     const login = useCallback(
         async (email: string, password: string) => {
-            const res = await apiFetch(`${API_BASE}/auth/login`, {
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            setFirebaseUser(cred.user);
+            const synced = await syncProfile(cred.user);
+            if (synced) router.push("/");
+        },
+        [syncProfile, router]
+    );
+
+    const loginWithGoogle = useCallback(async () => {
+        const cred = await signInWithPopup(auth, googleProvider);
+        setFirebaseUser(cred.user);
+        const synced = await syncProfile(cred.user);
+        if (synced) router.push("/");
+        // If not synced, needsRole will be set
+    }, [syncProfile, router]);
+
+    const resetPassword = useCallback(async (email: string) => {
+        await sendPasswordResetEmail(auth, email);
+    }, []);
+
+    const setupRole = useCallback(
+        async (role: string, node_codes?: string[]) => {
+            if (!firebaseUser || !token) throw new Error("Not authenticated");
+            const idToken = await firebaseUser.getIdToken();
+            const res = await apiFetch(`${API_BASE}/auth/setup-role`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({
+                    role,
+                    node_codes: role === "transit_node" ? node_codes : [],
+                }),
             });
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || "Login failed");
+                throw new Error(err.detail || "Role setup failed");
             }
-            const result = await res.json();
-            setUser(result.user);
-            setToken(result.token);
-            localStorage.setItem("sd_token", result.token);
+            const data = await res.json();
+            setUser(data.user);
+            setNeedsRole(false);
             router.push("/");
         },
-        [router]
+        [firebaseUser, token, router]
     );
 
     const logout = useCallback(() => {
+        signOut(auth);
         setUser(null);
         setToken(null);
-        localStorage.removeItem("sd_token");
+        setFirebaseUser(null);
+        setNeedsRole(false);
         router.push("/login");
     }, [router]);
 
@@ -133,10 +187,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             value={{
                 user,
                 token,
-                isAuthenticated: !!user,
+                firebaseUser,
+                isAuthenticated: !!user && !!token,
                 loading,
+                needsRole,
                 register,
                 login,
+                loginWithGoogle,
+                resetPassword,
+                setupRole,
                 logout,
             }}
         >

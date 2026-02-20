@@ -33,7 +33,10 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
     const [creating, setCreating] = useState(false);
     const [availableNodes, setAvailableNodes] = useState<GraphNode[]>([]);
     const [receivers, setReceivers] = useState<ReceiverUser[]>([]);
-    const [form, setForm] = useState({ shipment_id: "", origin: "", destination: "", receiver_id: "", po_text: "", invoice_text: "", bol_text: "" });
+    const [form, setForm] = useState({
+        shipment_id: "", origin: "", destination: "", receiver_id: "",
+        po_text: "", invoice_text: "", bol_text: "",
+    });
 
     useEffect(() => {
         apiFetch(`${API_BASE}/routes/nodes`).then((r) => r.json()).then(setAvailableNodes).catch(() => { });
@@ -45,17 +48,31 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
         setCreating(true);
         try {
             const body = {
-                shipment_id: form.shipment_id, origin: form.origin, destination: form.destination, receiver_id: form.receiver_id, route: [],
-                ...(form.po_text && { po_text: form.po_text }), ...(form.invoice_text && { invoice_text: form.invoice_text }), ...(form.bol_text && { bol_text: form.bol_text })
+                shipment_id: form.shipment_id, origin: form.origin,
+                destination: form.destination, receiver_id: form.receiver_id, route: [],
+                ...(form.po_text && { po_text: form.po_text }),
+                ...(form.invoice_text && { invoice_text: form.invoice_text }),
+                ...(form.bol_text && { bol_text: form.bol_text }),
             };
-            const res = await apiFetch(`${apiBase}/shipments/`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
-            if (res.ok) { setShowCreate(false); setForm({ shipment_id: "", origin: "", destination: "", receiver_id: "", po_text: "", invoice_text: "", bol_text: "" }); onCreated(); }
-            else { const err = await res.json(); alert(err.detail || "Failed to create shipment"); }
+            const res = await apiFetch(`${apiBase}/shipments/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                setShowCreate(false);
+                setForm({ shipment_id: "", origin: "", destination: "", receiver_id: "", po_text: "", invoice_text: "", bol_text: "" });
+                onCreated();
+            } else {
+                const err = await res.json();
+                alert(err.detail || "Failed to create shipment");
+            }
         } catch (e) { console.error("Create shipment error:", e); }
         setCreating(false);
     };
 
     const selectClass = "flex h-9 w-full rounded-md bg-secondary/50 px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none cursor-pointer border-0";
+    const textareaClass = "flex w-full rounded-md bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px] resize-y border-0";
 
     return (
         <Card>
@@ -74,6 +91,7 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
             <CardContent className="space-y-2">
                 {showCreate && (
                     <div className="animate-fade-in-scale bg-secondary/30 rounded-lg p-4 space-y-3">
+                        {/* Row 1: ID + Receiver */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-[11px] text-muted-foreground">Shipment ID</Label>
@@ -88,6 +106,8 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                                 </select>
                             </div>
                         </div>
+
+                        {/* Row 2: Origin + Destination */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-[11px] text-muted-foreground">Origin Node</Label>
@@ -104,19 +124,35 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                                 </select>
                             </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                            <textarea className="flex w-full rounded-md bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px] resize-y border-0"
-                                placeholder="PO text (optional)" value={form.po_text} onChange={(e) => setForm({ ...form, po_text: e.target.value })} />
-                            <textarea className="flex w-full rounded-md bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px] resize-y border-0"
-                                placeholder="Invoice (optional)" value={form.invoice_text} onChange={(e) => setForm({ ...form, invoice_text: e.target.value })} />
-                            <textarea className="flex w-full rounded-md bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px] resize-y border-0"
-                                placeholder="BOL (optional)" value={form.bol_text} onChange={(e) => setForm({ ...form, bol_text: e.target.value })} />
+
+                        {/* Row 3: Document texts (optional, plain text for hash verification) */}
+                        <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">
+                                Documents <span className="text-muted-foreground/60">(plain text — hashed & anchored on blockchain)</span>
+                            </Label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <textarea className={textareaClass}
+                                    placeholder="Purchase Order text..."
+                                    value={form.po_text}
+                                    onChange={(e) => setForm({ ...form, po_text: e.target.value })} />
+                                <textarea className={textareaClass}
+                                    placeholder="Invoice text..."
+                                    value={form.invoice_text}
+                                    onChange={(e) => setForm({ ...form, invoice_text: e.target.value })} />
+                                <textarea className={textareaClass}
+                                    placeholder="Bill of Lading text..."
+                                    value={form.bol_text}
+                                    onChange={(e) => setForm({ ...form, bol_text: e.target.value })} />
+                            </div>
                         </div>
+
+                        {/* Route preview */}
                         {form.origin && form.destination && (
                             <div className="p-2 rounded-md bg-cyan-500/5 text-xs text-cyan-400">
                                 🔀 Route auto-generated: <strong>{form.origin}</strong> → <strong>{form.destination}</strong>
                             </div>
                         )}
+
                         <Button id="submit-shipment-btn" onClick={handleCreate}
                             disabled={creating || !form.shipment_id || !form.origin || !form.destination || !form.receiver_id}
                             className="bg-foreground text-background hover:bg-foreground/90 text-xs">
@@ -125,6 +161,7 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                     </div>
                 )}
 
+                {/* Shipment List */}
                 <div className="flex flex-col gap-1 max-h-[400px] overflow-y-auto">
                     {shipments.length === 0 && (
                         <p className="text-muted-foreground text-center py-8 text-sm">
@@ -136,8 +173,8 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                             key={s.shipment_id}
                             onClick={() => onSelect(s)}
                             className={`animate-fade-in flex items-center justify-between px-3.5 py-2.5 rounded-lg text-left w-full transition-all duration-200 cursor-pointer group ${selectedShipment?.shipment_id === s.shipment_id
-                                    ? "bg-secondary shadow-sm"
-                                    : "hover:bg-secondary/50"
+                                ? "bg-secondary shadow-sm"
+                                : "hover:bg-secondary/50"
                                 }`}
                             style={{ animationDelay: `${i * 30}ms` }}
                         >

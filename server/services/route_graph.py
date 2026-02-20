@@ -2,6 +2,7 @@
 Route Graph — Indian logistics transit network with Dijkstra pathfinding.
 
 Provides optimal route generation between any two nodes in the network.
+Travel times are in SECONDS for fast simulation.
 """
 
 import heapq
@@ -26,7 +27,7 @@ NODES: dict[str, dict] = {
     "CHN": {"name": "Chennai Hub", "x": 410, "y": 670},
 }
 
-# (node_a, node_b, travel_hours)
+# (node_a, node_b, travel_seconds) — using seconds for fast simulation
 EDGES: list[tuple[str, str, float]] = [
     ("DEL", "JAI", 5),
     ("DEL", "LKO", 9),
@@ -55,16 +56,16 @@ EDGES: list[tuple[str, str, float]] = [
 
 def _build_adjacency() -> dict[str, list[tuple[str, float]]]:
     adj: dict[str, list[tuple[str, float]]] = {code: [] for code in NODES}
-    for a, b, hours in EDGES:
-        adj[a].append((b, hours))
-        adj[b].append((a, hours))
+    for a, b, secs in EDGES:
+        adj[a].append((b, secs))
+        adj[b].append((a, secs))
     return adj
 
 
 def find_optimal_route(origin: str, destination: str) -> list[dict] | None:
     """
     Dijkstra's shortest path from origin to destination.
-    Returns list of RouteNode dicts with ETAs, or None if no path exists.
+    Returns list of RouteNode dicts with ETAs (in seconds), or None if no path.
     """
     if origin not in NODES or destination not in NODES:
         return None
@@ -108,19 +109,18 @@ def find_optimal_route(origin: str, destination: str) -> list[dict] | None:
         node = prev[node]
     path.reverse()
 
-    # Build route nodes with cumulative ETAs
+    # Build route nodes with cumulative ETAs (seconds)
     now = datetime.now(timezone.utc)
     route: list[dict] = []
-    cumulative_hours = 0.0
+    cumulative_secs = 0.0
 
     for i, code in enumerate(path):
         if i > 0:
-            # Find edge weight between path[i-1] and path[i]
-            for a, b, hours in EDGES:
+            for a, b, secs in EDGES:
                 if (a == path[i - 1] and b == code) or (b == path[i - 1] and a == code):
-                    cumulative_hours += hours
+                    cumulative_secs += secs
                     break
-        eta = now + timedelta(hours=cumulative_hours)
+        eta = now + timedelta(seconds=cumulative_secs)
         route.append({
             "location_code": code,
             "name": NODES[code]["name"],
@@ -155,9 +155,9 @@ def get_graph_data() -> dict:
         {
             "source": a,
             "target": b,
-            "travel_hours": hours,
-            "label": f"{hours}h",
+            "travel_hours": secs,  # kept for compat, actual unit is seconds
+            "label": f"{secs}s",
         }
-        for a, b, hours in EDGES
+        for a, b, secs in EDGES
     ]
     return {"nodes": nodes, "edges": edges}
