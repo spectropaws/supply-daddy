@@ -14,7 +14,7 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { useTheme } from "./components/ThemeContext";
 
-export type Role = "manufacturer" | "transit_node" | "receiver";
+export type Role = "manufacturer" | "receiver";
 
 export interface Shipment {
   shipment_id: string;
@@ -67,7 +67,6 @@ export interface Anomaly {
 
 const roleLabels: Record<Role, { label: string; icon: string }> = {
   manufacturer: { label: "Manufacturer", icon: "🏭" },
-  transit_node: { label: "Transit Node", icon: "🚚" },
   receiver: { label: "Receiver", icon: "📦" },
 };
 
@@ -102,11 +101,12 @@ export default function Home() {
   }, [token, authHeaders]);
 
   const fetchAnomalies = useCallback(async () => {
+    if (!token) return;
     try {
-      const res = await apiFetch(`${API_BASE}/anomalies`);
+      const res = await apiFetch(`${API_BASE}/anomalies`, { headers: authHeaders() });
       if (res.ok) setAnomalies(await res.json());
     } catch (e) { console.error("Failed to fetch anomalies:", e); }
-  }, []);
+  }, [token, authHeaders]);
 
   const refreshAll = useCallback(async () => {
     setLoading(true);
@@ -139,7 +139,11 @@ export default function Home() {
     );
   }
 
-  if (!isAuthenticated || !user || !role) return null;
+  if (!isAuthenticated || !user || !role) {
+    // Redirect to login if not authenticated
+    if (typeof window !== "undefined") window.location.href = "/login";
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -176,13 +180,13 @@ export default function Home() {
             onClick={() => setGodModeOpen(!godModeOpen)}
             className={`text-xs transition-all duration-300 ${godModeOpen
               ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30"
-              : "bg-secondary text-purple-400 hover:bg-secondary/80"
+              : "bg-secondary text-purple-600 dark:text-purple-400 hover:bg-secondary/80"
               }`}
           >
             ⚡ God Mode
           </Button>
 
-          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground hover:text-red-400">
+          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400">
             Logout
           </Button>
         </div>
@@ -216,10 +220,13 @@ export default function Home() {
           {/* Center — Route Graph (hero) */}
           <div className="animate-fade-in-scale flex flex-col gap-4" style={{ animationDelay: '50ms' }}>
             <div className="flex-1 min-h-[500px]">
-              <RouteGraph shipment={selectedShipment} />
+              <RouteGraph
+                shipment={selectedShipment}
+                anomalies={anomalies.filter((a) => a.shipment_id === selectedShipment?.shipment_id)}
+              />
             </div>
-            {/* ETA Timeline sits below the graph for transit/receiver roles */}
-            {(role === "transit_node" || role === "receiver") && (
+            {/* ETA Timeline sits below the graph for receiver role */}
+            {role === "receiver" && (
               <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
                 <ETATimeline shipment={selectedShipment} />
               </div>

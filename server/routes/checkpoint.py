@@ -17,14 +17,9 @@ from services import firebase_service, blockchain_service, genai_service
 from services.risk_engine import evaluate_checkpoint
 from services.eta_engine import propagate_delay
 from services.auth_middleware import get_current_user, UserContext
+from routes.shipment import compute_doc_hash
 
 router = APIRouter(prefix="/checkpoints", tags=["Checkpoints"])
-
-
-def compute_doc_hash(po_text: str, invoice_text: str, bol_text: str) -> bytes:
-    """Same deterministic hash as used at shipment creation."""
-    combined = f"PO:{po_text}|INV:{invoice_text}|BOL:{bol_text}"
-    return hashlib.sha256(combined.encode("utf-8")).digest()
 
 
 @router.post("/", response_model=dict)
@@ -45,7 +40,7 @@ async def register_checkpoint(
         raise HTTPException(status_code=400, detail="Shipment already delivered")
 
     route = shipment.get("route", [])
-    risk_profile = shipment.get("risk_profile", {})
+    risk_profile = shipment.get("risk_profile") or {}
     product_category = risk_profile.get("product_category", "default")
 
     # ─── Find node in route ─────────────────────────────
@@ -77,12 +72,12 @@ async def register_checkpoint(
         )
 
     # ─── Document hash verification ─────────────────────
-    # Recompute hash from current document texts
-    current_hash = compute_doc_hash(
-        shipment.get("po_text", ""),
-        shipment.get("invoice_text", ""),
-        shipment.get("bol_text", ""),
-    )
+    current_po = shipment.get("po_text", "")
+    current_inv = shipment.get("invoice_text", "")
+    current_bol = shipment.get("bol_text", "")
+
+    # Recompute hash from current text strings (same formula as shipment creation)
+    current_hash = compute_doc_hash(current_po, current_inv, current_bol)
     current_hash_hex = current_hash.hex()
 
     # Compare with on-chain hash
@@ -110,7 +105,6 @@ async def register_checkpoint(
             "resolved": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        await firebase_service.add_anomaly(anomaly_data)
 
     # ─── Calculate delay ────────────────────────────────
     now = checkpoint.timestamp or datetime.now(timezone.utc)
@@ -186,13 +180,76 @@ async def register_checkpoint(
         },
     )
 
-    # ─── Process telemetry anomalies (skip GenAI to avoid blocking) ──
+    # ─── Process telemetry anomalies + GenAI Mitigations ──
+    import asyncio
+    
     anomaly_list = []
-    for anomaly in anomalies:
-        anomaly_dict = anomaly.model_dump(mode="json")
+    
+    # Collect all anomaly dicts to process through GenAI
+    all_anomaly_dicts = []
+    
+    # Add deterministic anomalies from risk engine
+    for a in anomalies:
+        all_anomaly_dicts.append(a.model_dump(mode="json"))
+    
+    # Add tamper anomaly if detected (it hasn't been saved to Firebase yet)
+    if tamper_detected:
+        all_anomaly_dicts.append(anomaly_data)
+    
+    # Process each anomaly through GenAI concurrently
+    async def process_anomaly(anomaly_dict):
+        try:
+            context = {
+                **anomaly_dict,
+                "product_category": product_category,
+                "route_progress": f"Node {node_index + 1} of {len(route)}",
+                "current_status": "tampered" if tamper_detected else "delayed" if delay_seconds > 0 else "in_transit"
+            }
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[Checkpoint] Processing anomaly {anomaly_dict.get('anomaly_type')} through GenAI...")
+            
+            assessment = await asyncio.wait_for(
+                genai_service.interpret_anomaly(context),
+                timeout=30.0
+            )
+            anomaly_dict["genai_assessment"] = assessment
+            logger.info(f"[Checkpoint] GenAI assessment received for {anomaly_dict.get('anomaly_type')}: severity={assessment.get('severity_level')}")
+        except asyncio.TimeoutError:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[Checkpoint] GenAI timed out after 30s for {anomaly_dict.get('anomaly_type')}")
+            anomaly_dict["genai_assessment"] = {
+                "risk_assessment": "System detected an anomaly but AI service timed out.",
+                "business_impact": "Unknown",
+                "recommended_action": "Manual review required by operations team.",
+                "severity_level": anomaly_dict.get("severity", "MEDIUM").upper(),
+                "error": "timeout"
+            }
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[Checkpoint] GenAI error for {anomaly_dict.get('anomaly_type')}: {e}", exc_info=True)
+            anomaly_dict["genai_assessment"] = {
+                "risk_assessment": "System detected an anomaly but AI service timed out.",
+                "business_impact": "Unknown",
+                "recommended_action": "Manual review required by operations team.",
+                "severity_level": anomaly_dict.get("severity", "MEDIUM").upper(),
+                "error": str(e)
+            }
+            
         await firebase_service.add_anomaly(anomaly_dict)
-        anomaly_list.append(anomaly_dict)
+        return anomaly_dict
 
+    # Run AI classifications for all anomalies
+    if all_anomaly_dicts:
+        tasks = [process_anomaly(d) for d in all_anomaly_dicts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in results:
+            if isinstance(r, dict):
+                anomaly_list.append(r)
+    
     return {
         "status": "delivered" if is_final
                   else "tamper_detected" if tamper_detected

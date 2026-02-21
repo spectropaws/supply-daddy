@@ -48,15 +48,15 @@ export default function ETATimeline({ shipment }: Props) {
                                 style={{ paddingBottom: i === route.length - 1 ? 0 : "20px", animationDelay: `${i * 60}ms` }}
                             >
                                 <div className={`absolute -left-6 top-0.5 w-3.5 h-3.5 rounded-full transition-all duration-300 ${isCompleted
-                                        ? "bg-green-500 shadow-sm shadow-green-500/30"
-                                        : isCurrent
-                                            ? "bg-foreground shadow-md shadow-foreground/20 scale-110"
-                                            : "bg-secondary"
+                                    ? "bg-green-500 shadow-sm shadow-green-500/30"
+                                    : isCurrent
+                                        ? "bg-foreground shadow-md shadow-foreground/20 scale-110"
+                                        : "bg-secondary"
                                     }`} />
 
                                 <div>
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <span className={`font-semibold text-sm transition-colors ${isCompleted ? "text-green-400" : isCurrent ? "text-foreground" : "text-muted-foreground"
+                                        <span className={`font-semibold text-sm transition-colors ${isCompleted ? "text-green-600 dark:text-green-400" : isCurrent ? "text-foreground" : "text-muted-foreground"}
                                             }`}>
                                             {node.name}
                                         </span>
@@ -65,9 +65,9 @@ export default function ETATimeline({ shipment }: Props) {
                                         </span>
                                     </div>
                                     <div className="text-[11px] text-muted-foreground flex gap-3">
-                                        {isCompleted && <span className="text-green-400/70">✅ {formatDate(node.actual_arrival)}</span>}
+                                        {isCompleted && <span className="text-green-600 dark:text-green-400">✅ {formatDate(node.actual_arrival)}</span>}
                                         {node.eta && !isCompleted && (
-                                            <span className={isDelayed ? "text-amber-400/80" : "text-muted-foreground"}>
+                                            <span className={isDelayed ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
                                                 {isDelayed ? "⚠️" : "🕐"} ETA: {formatDate(node.eta)}
                                             </span>
                                         )}

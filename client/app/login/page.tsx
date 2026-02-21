@@ -105,7 +105,6 @@ export default function LoginPage() {
 
     const roles = [
         { key: "manufacturer", label: "Manufacturer", icon: "🏭", desc: "Create & track" },
-        { key: "transit_node", label: "Transit Node", icon: "🚚", desc: "Operate hubs" },
         { key: "receiver", label: "Receiver", icon: "📦", desc: "Receive goods" },
     ];
 
@@ -127,7 +126,7 @@ export default function LoginPage() {
                     <CardContent className="pt-6 space-y-4">
                         <div className="space-y-2">
                             <Label className="text-xs text-muted-foreground">Your Role</Label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                                 {roles.map((r) => (
                                     <button
                                         key={r.key}
@@ -148,37 +147,15 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        {form.role === "transit_node" && (
-                            <div className="space-y-2 animate-fade-in">
-                                <Label className="text-xs text-muted-foreground">Select Your Nodes</Label>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {availableNodes.map((n) => (
-                                        <button
-                                            key={n.code}
-                                            type="button"
-                                            onClick={() => toggleNode(n.code)}
-                                            className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-200 cursor-pointer ${form.node_codes.includes(n.code)
-                                                ? "bg-foreground text-background shadow-sm"
-                                                : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                                                }`}
-                                        >
-                                            {n.code} — {n.name}
-                                        </button>
-                                    ))}
-                                </div>
-                                {form.node_codes.length === 0 && (
-                                    <p className="text-[11px] text-amber-400/80">⚠️ Select at least one node</p>
-                                )}
-                            </div>
-                        )}
+
 
                         {error && (
-                            <div className="animate-fade-in p-2.5 rounded-lg bg-red-500/8 text-red-400 text-xs">{error}</div>
+                            <div className="animate-fade-in p-2.5 rounded-lg bg-red-500/8 text-red-600 dark:text-red-400 text-xs">{error}</div>
                         )}
 
                         <Button
                             onClick={handleRoleSubmit}
-                            disabled={loading || (form.role === "transit_node" && form.node_codes.length === 0)}
+                            disabled={loading}
                             className="w-full h-10 font-semibold text-sm bg-foreground text-background hover:bg-foreground/90 mt-2"
                         >
                             {loading ? "Setting up..." : "Continue →"}
@@ -285,10 +262,10 @@ export default function LoginPage() {
                         )}
 
                         {error && (
-                            <div className="animate-fade-in p-2.5 rounded-lg bg-red-500/8 text-red-400 text-xs">{error}</div>
+                            <div className="animate-fade-in p-2.5 rounded-lg bg-red-500/8 text-red-600 dark:text-red-400 text-xs">{error}</div>
                         )}
                         {success && (
-                            <div className="animate-fade-in p-2.5 rounded-lg bg-green-500/8 text-green-400 text-xs">{success}</div>
+                            <div className="animate-fade-in p-2.5 rounded-lg bg-green-500/8 text-green-600 dark:text-green-400 text-xs">{success}</div>
                         )}
 
                         <Button

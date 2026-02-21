@@ -221,12 +221,12 @@ export default function SimulationBar({
                 {/* Status indicator */}
                 <div className="flex items-center gap-2">
                     {paused ? (
-                        <span className="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
+                        <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs font-semibold">
                             <span className="w-2 h-2 rounded-full bg-amber-400" />
                             PAUSED
                         </span>
                     ) : allDelivered ? (
-                        <span className="flex items-center gap-1.5 text-green-400 text-xs font-semibold">
+                        <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-xs font-semibold">
                             <span className="w-2 h-2 rounded-full bg-green-400" />
                             ALL DELIVERED
                         </span>
@@ -236,7 +236,7 @@ export default function SimulationBar({
                             SCANNING
                         </span>
                     ) : (
-                        <span className="flex items-center gap-1.5 text-blue-400 text-xs font-semibold">
+                        <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 text-xs font-semibold">
                             <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
                             SIMULATING
                         </span>
@@ -281,13 +281,13 @@ export default function SimulationBar({
                 )}
 
                 {paused && hasActive && (
-                    <span className="text-xs text-amber-400/70 flex-1">
+                    <span className="text-xs text-amber-600 dark:text-amber-400 flex-1">
                         ⚡ God Mode active — simulation paused. Tamper documents, then close God Mode to resume.
                     </span>
                 )}
 
                 {allDelivered && !paused && (
-                    <span className="text-xs text-green-400/70 flex-1">
+                    <span className="text-xs text-green-600 dark:text-green-400 flex-1">
                         All shipments have been delivered successfully.
                     </span>
                 )}
@@ -296,10 +296,10 @@ export default function SimulationBar({
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     <span>{sim.totalScanned} scans</span>
                     {sim.lastResult?.hash_verification?.tamper_detected && (
-                        <span className="text-red-400 font-semibold animate-pulse">🚨 TAMPER DETECTED</span>
+                        <span className="text-red-600 dark:text-red-400 font-semibold animate-pulse">🚨 TAMPER DETECTED</span>
                     )}
                     {sim.lastResult?.status === "delivered" && (
-                        <span className="text-green-400 font-semibold">✅ DELIVERED</span>
+                        <span className="text-green-600 dark:text-green-400 font-semibold">✅ DELIVERED</span>
                     )}
                 </div>
             </div>

@@ -34,9 +34,13 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
     const [availableNodes, setAvailableNodes] = useState<GraphNode[]>([]);
     const [receivers, setReceivers] = useState<ReceiverUser[]>([]);
     const [form, setForm] = useState({
-        shipment_id: "", origin: "", destination: "", receiver_id: "",
-        po_text: "", invoice_text: "", bol_text: "",
+        origin: "", destination: "", receiver_id: "",
     });
+    const [files, setFiles] = useState<{
+        po_file: File | null;
+        invoice_file: File | null;
+        bol_file: File | null;
+    }>({ po_file: null, invoice_file: null, bol_file: null });
 
     useEffect(() => {
         apiFetch(`${API_BASE}/routes/nodes`).then((r) => r.json()).then(setAvailableNodes).catch(() => { });
@@ -44,24 +48,31 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
     }, []);
 
     const handleCreate = async () => {
-        if (!form.shipment_id || !form.origin || !form.destination || !form.receiver_id) return;
+        if (!form.origin || !form.destination || !form.receiver_id) return;
         setCreating(true);
         try {
-            const body = {
-                shipment_id: form.shipment_id, origin: form.origin,
-                destination: form.destination, receiver_id: form.receiver_id, route: [],
-                ...(form.po_text && { po_text: form.po_text }),
-                ...(form.invoice_text && { invoice_text: form.invoice_text }),
-                ...(form.bol_text && { bol_text: form.bol_text }),
-            };
+            // Send files as FormData — backend does PDF text extraction
+            const formData = new FormData();
+            formData.append("origin", form.origin);
+            formData.append("destination", form.destination);
+            formData.append("receiver_id", form.receiver_id);
+            if (files.po_file) formData.append("po_file", files.po_file);
+            if (files.invoice_file) formData.append("invoice_file", files.invoice_file);
+            if (files.bol_file) formData.append("bol_file", files.bol_file);
+
             const res = await apiFetch(`${apiBase}/shipments/`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                body: JSON.stringify(body),
+                headers: {
+                    // No Content-Type — browser sets it automatically with boundary for FormData
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: formData,
             });
+
             if (res.ok) {
                 setShowCreate(false);
-                setForm({ shipment_id: "", origin: "", destination: "", receiver_id: "", po_text: "", invoice_text: "", bol_text: "" });
+                setForm({ origin: "", destination: "", receiver_id: "" });
+                setFiles({ po_file: null, invoice_file: null, bol_file: null });
                 onCreated();
             } else {
                 const err = await res.json();
@@ -72,13 +83,24 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
     };
 
     const selectClass = "flex h-9 w-full rounded-md bg-secondary/50 px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none cursor-pointer border-0";
-    const textareaClass = "flex w-full rounded-md bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[60px] resize-y border-0";
+    const fileInputClass = "flex h-9 w-full rounded-md bg-secondary/50 px-3 py-1 text-[11px] text-muted-foreground file:border-0 file:bg-transparent file:text-foreground file:text-[11px] file:font-medium appearance-none cursor-pointer border-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+    const FileUploadBox = ({ id, label, icon, file, onChange }: { id: string, label: string, icon: string, file: File | null, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
+        <div className="relative border-2 border-dashed border-muted-foreground/20 rounded-lg p-3 flex flex-col items-center justify-center text-center hover:bg-secondary/40 transition-colors cursor-pointer group h-24">
+            <input type="file" id={id} accept="application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={onChange} />
+            <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">{icon}</div>
+            <div className="text-[11px] font-medium text-foreground">{label}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 max-w-full truncate px-2">
+                {file ? <span className="text-blue-600 dark:text-blue-400 font-semibold">{file.name}</span> : "Click to select"}
+            </div>
+        </div>
+    );
 
     return (
         <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
                 <CardTitle className="flex items-center gap-2 text-base">
-                    📋 {role === "receiver" ? "Assigned Shipments" : role === "transit_node" ? "At My Nodes" : "Active Shipments"}
+                    📋 {role === "receiver" ? "Assigned Shipments" : "Active Shipments"}
                     <span className="text-xs text-muted-foreground font-normal bg-secondary/60 px-2 py-0.5 rounded-full">{shipments.length}</span>
                 </CardTitle>
                 {role === "manufacturer" && (
@@ -91,13 +113,8 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
             <CardContent className="space-y-2">
                 {showCreate && (
                     <div className="animate-fade-in-scale bg-secondary/30 rounded-lg p-4 space-y-3">
-                        {/* Row 1: ID + Receiver */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <Label className="text-[11px] text-muted-foreground">Shipment ID</Label>
-                                <Input id="input-shipment-id" placeholder="e.g. SHIP-001" value={form.shipment_id}
-                                    onChange={(e) => setForm({ ...form, shipment_id: e.target.value })} className="bg-secondary/50 border-0" />
-                            </div>
+                        {/* Row 1: Receiver */}
+                        <div className="grid grid-cols-1 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-[11px] text-muted-foreground">Receiver</Label>
                                 <select className={selectClass} value={form.receiver_id} onChange={(e) => setForm({ ...form, receiver_id: e.target.value })}>
@@ -125,38 +142,28 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                             </div>
                         </div>
 
-                        {/* Row 3: Document texts (optional, plain text for hash verification) */}
-                        <div className="space-y-1">
+                        {/* Row 3: Documents (PDFs) */}
+                        <div className="space-y-1 pt-1">
                             <Label className="text-[11px] text-muted-foreground">
-                                Documents <span className="text-muted-foreground/60">(plain text — hashed & anchored on blockchain)</span>
+                                Upload Documents <span className="text-muted-foreground/60">(PDFs — binary hashed & securely anchored on-chain)</span>
                             </Label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <textarea className={textareaClass}
-                                    placeholder="Purchase Order text..."
-                                    value={form.po_text}
-                                    onChange={(e) => setForm({ ...form, po_text: e.target.value })} />
-                                <textarea className={textareaClass}
-                                    placeholder="Invoice text..."
-                                    value={form.invoice_text}
-                                    onChange={(e) => setForm({ ...form, invoice_text: e.target.value })} />
-                                <textarea className={textareaClass}
-                                    placeholder="Bill of Lading text..."
-                                    value={form.bol_text}
-                                    onChange={(e) => setForm({ ...form, bol_text: e.target.value })} />
+                            <div className="grid grid-cols-3 gap-2 mt-1">
+                                <FileUploadBox id="po_file" label="Purchase Order" icon="🧾" file={files.po_file}
+                                    onChange={(e) => setFiles({ ...files, po_file: e.target.files?.[0] || null })} />
+                                <FileUploadBox id="invoice_file" label="Invoice" icon="💸" file={files.invoice_file}
+                                    onChange={(e) => setFiles({ ...files, invoice_file: e.target.files?.[0] || null })} />
+                                <FileUploadBox id="bol_file" label="Bill of Lading" icon="📦" file={files.bol_file}
+                                    onChange={(e) => setFiles({ ...files, bol_file: e.target.files?.[0] || null })} />
                             </div>
                         </div>
 
-                        {/* Route preview */}
-                        {form.origin && form.destination && (
-                            <div className="p-2 rounded-md bg-cyan-500/5 text-xs text-cyan-400">
-                                🔀 Route auto-generated: <strong>{form.origin}</strong> → <strong>{form.destination}</strong>
-                            </div>
-                        )}
-
-                        <Button id="submit-shipment-btn" onClick={handleCreate}
-                            disabled={creating || !form.shipment_id || !form.origin || !form.destination || !form.receiver_id}
-                            className="bg-foreground text-background hover:bg-foreground/90 text-xs">
-                            {creating ? "Creating..." : "🚀 Create Shipment"}
+                        <Button
+                            id="submit-shipment-btn"
+                            disabled={creating || !form.origin || !form.destination || !form.receiver_id}
+                            onClick={handleCreate}
+                            className="w-full text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white mt-2"
+                        >
+                            {creating ? "⏳ Submitting & Hashing..." : "🚀 Finalize & Anchor on Blockchain"}
                         </Button>
                     </div>
                 )}
@@ -191,7 +198,7 @@ export default function ShipmentPanel({ shipments, selectedShipment, onSelect, o
                         </button>
                     ))}
                 </div>
-            </CardContent>
-        </Card>
+            </CardContent >
+        </Card >
     );
 }

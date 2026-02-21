@@ -6,7 +6,7 @@ GenAI calls are wrapped with timeouts to prevent blocking.
 import asyncio
 import hashlib
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from models.telemetry_model import (
     AnomalyRecord,
     GodModeDelay,
@@ -16,21 +16,47 @@ from models.telemetry_model import (
 from services import firebase_service, genai_service, blockchain_service
 from services.risk_engine import evaluate_checkpoint
 from services.eta_engine import propagate_delay
+from services.auth_middleware import get_current_user, UserContext
 
 router = APIRouter(tags=["Anomalies"])
 
 
 @router.get("/anomalies/{shipment_id}", response_model=list[dict])
-async def list_anomalies(shipment_id: str):
-    """Get all anomalies for a shipment."""
+async def list_anomalies(shipment_id: str, user: UserContext = Depends(get_current_user)):
+    """Get all anomalies for a shipment if authorized."""
+    shipment = await firebase_service.get_shipment(shipment_id)
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+        
+    if user.role not in ["manufacturer", "receiver"]:
+        raise HTTPException(status_code=403, detail="Unauthorized role for risk alerts")
+    
+    if user.role == "manufacturer" and shipment.get("manufacturer_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Not the manufacturer for this shipment")
+    if user.role == "receiver" and shipment.get("receiver_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Not the receiver for this shipment")
+
     anomalies = await firebase_service.get_anomalies(shipment_id)
     return anomalies
 
 
 @router.get("/anomalies", response_model=list[dict])
-async def list_all_anomalies():
-    """Get all anomalies across all shipments."""
-    return await firebase_service.get_all_anomalies()
+async def list_all_anomalies(user: UserContext = Depends(get_current_user)):
+    """Get all anomalies for shipments the user is involved in."""
+    if user.role not in ["manufacturer", "receiver"]:
+        return []
+
+    all_shipments = await firebase_service.list_shipments()
+    valid_shipment_ids = set()
+    
+    for s in all_shipments:
+        if user.role == "manufacturer" and s.get("manufacturer_id") == user.user_id:
+            valid_shipment_ids.add(s.get("shipment_id"))
+        elif user.role == "receiver" and s.get("receiver_id") == user.user_id:
+            valid_shipment_ids.add(s.get("shipment_id"))
+
+    all_anomalies = await firebase_service.get_all_anomalies()
+    return [a for a in all_anomalies if a.get("shipment_id") in valid_shipment_ids]
 
 
 async def _safe_genai(context: dict, timeout: float = 5.0) -> dict | None:

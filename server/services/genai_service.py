@@ -1,5 +1,5 @@
 """
-GenAI Service — MegaLLM integration for:
+GenAI Service — Groq integration for:
 1. Shipment document classification/reconciliation
 2. Anomaly interpretation
 """
@@ -19,32 +19,62 @@ except ImportError:
 
 
 def _get_client():
-    """Create MegaLLM client via OpenAI SDK."""
-    if not _HAS_GENAI:
-        return None
-    api_key = os.getenv("MEGALLM_API_KEY", "")
-    if not api_key or api_key == "your_megallm_api_key_here":
-        logger.warning("MEGALLM_API_KEY not set — using stub responses")
-        return None
-    
-    return OpenAI(
-        base_url="https://ai.megallm.io/v1",
-        api_key=api_key
-    )
+    """Create Groq client via OpenAI SDK. Currently disabled — using stub responses."""
+    return None  # Temporarily disabled to prevent blocking
+    # if not _HAS_GENAI:
+    #     return None
+    # api_key = os.getenv("GROQ_API_KEY", "")
+    # if not api_key:
+    #     logger.warning("GROQ_API_KEY not set — using stub responses")
+    #     return None
+    # 
+    # return OpenAI(
+    #     base_url="https://api.groq.com/openai/v1",
+    #     api_key=api_key
+    # )
 
 
 def _parse_json_response(text: str) -> dict:
-    """Extract JSON from response (handles markdown code fences)."""
+    """Extract JSON from response (handles markdown code fences and <think> tags)."""
+    import re
     cleaned = text.strip()
+    # Strip Qwen3-style <think>...</think> reasoning blocks
+    cleaned = re.sub(r'<think>.*?</think>', '', cleaned, flags=re.DOTALL).strip()
+    # Remove markdown code fences
     if cleaned.startswith("```"):
         lines = cleaned.split("\n")
-        # Remove first and last lines (code fences)
         lines = [l for l in lines if not l.strip().startswith("```")]
         cleaned = "\n".join(lines)
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
+        # Try to find JSON object in the text
+        match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+        logger.error(f"Failed to parse JSON from GenAI response: {text[:500]}")
         return {"raw_response": text, "parse_error": True}
+
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract all text from a binary PDF stream using pdfplumber."""
+    import pdfplumber
+    import io
+    
+    text = ""
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+        return text.strip()
+    except Exception as e:
+        logger.error(f"PDF extraction error: {e}")
+        return ""
 
 
 async def classify_shipment(
@@ -88,8 +118,10 @@ Respond ONLY with a JSON object in this exact format, no markdown formatting or 
 }}"""
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-5",
+        import asyncio
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "user", "content": prompt}
             ],
@@ -97,7 +129,7 @@ Respond ONLY with a JSON object in this exact format, no markdown formatting or 
         )
         return _parse_json_response(response.choices[0].message.content)
     except Exception as e:
-        logger.error(f"MegaLLM classification error: {e}")
+        logger.error(f"Groq classification error: {e}")
         return {
             "product_category": "default",
             "risk_flags": [],
@@ -115,8 +147,9 @@ async def interpret_anomaly(anomaly_context: dict) -> dict:
     client = _get_client()
 
     if client is None:
+        logger.warning("No GenAI client available — returning stub response")
         return {
-            "risk_assessment": f"Anomaly {anomaly_context.get('anomaly', 'UNKNOWN')} detected — "
+            "risk_assessment": f"Anomaly {anomaly_context.get('anomaly_type', 'UNKNOWN')} detected — "
                               f"potential compliance violation for {anomaly_context.get('product_category', 'unknown')} shipment.",
             "business_impact": "Shipment may require inspection or rerouting. "
                               "Downstream delivery schedules may be affected.",
@@ -128,7 +161,7 @@ async def interpret_anomaly(anomaly_context: dict) -> dict:
     prompt = f"""You are a supply chain risk analyst. Analyze the following anomaly event and provide a business impact assessment.
 
 Anomaly Context:
-{json.dumps(anomaly_context, indent=2)}
+{json.dumps(anomaly_context, indent=2, default=str)}
 
 Respond ONLY with a JSON object in this exact format, no markdown formatting or extra text:
 {{
@@ -139,16 +172,26 @@ Respond ONLY with a JSON object in this exact format, no markdown formatting or 
 }}"""
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-5",
+        logger.info(f"[GenAI] Sending anomaly interpretation request for {anomaly_context.get('anomaly_type', '?')}")
+        import asyncio
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
+            model="alibaba-qwen3-32b",
             messages=[
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1
         )
-        return _parse_json_response(response.choices[0].message.content)
+        raw = response.choices[0].message.content
+        logger.info(f"[GenAI] Raw response (first 300 chars): {raw[:300]}")
+        parsed = _parse_json_response(raw)
+        if parsed.get("parse_error"):
+            logger.error(f"[GenAI] JSON parse failed, raw: {raw[:500]}")
+        else:
+            logger.info(f"[GenAI] Successfully parsed assessment: severity={parsed.get('severity_level')}")
+        return parsed
     except Exception as e:
-        logger.error(f"MegaLLM anomaly interpretation error: {e}")
+        logger.error(f"[GenAI] Groq anomaly interpretation error: {type(e).__name__}: {e}", exc_info=True)
         return {
             "risk_assessment": "Unable to generate AI assessment.",
             "business_impact": "Unknown",
@@ -156,3 +199,4 @@ Respond ONLY with a JSON object in this exact format, no markdown formatting or 
             "severity_level": "MEDIUM",
             "error": str(e),
         }
+

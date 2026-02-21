@@ -4,14 +4,14 @@ import type { Anomaly } from "../page";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 const severityConfig: Record<string, { text: string; bg: string }> = {
-    critical: { text: "text-red-400", bg: "bg-red-500/8" },
-    CRITICAL: { text: "text-red-400", bg: "bg-red-500/8" },
-    HIGH: { text: "text-amber-400", bg: "bg-amber-500/8" },
-    high: { text: "text-amber-400", bg: "bg-amber-500/8" },
-    MEDIUM: { text: "text-blue-400", bg: "bg-blue-500/8" },
-    medium: { text: "text-blue-400", bg: "bg-blue-500/8" },
-    LOW: { text: "text-green-400", bg: "bg-green-500/8" },
-    low: { text: "text-green-400", bg: "bg-green-500/8" },
+    critical: { text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
+    CRITICAL: { text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
+    HIGH: { text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+    high: { text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+    MEDIUM: { text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10" },
+    medium: { text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10" },
+    LOW: { text: "text-green-600 dark:text-green-400", bg: "bg-green-500/10" },
+    low: { text: "text-green-600 dark:text-green-400", bg: "bg-green-500/10" },
 };
 
 const anomalyLabels: Record<string, string> = {
@@ -42,7 +42,7 @@ export default function AlertsPanel({ anomalies }: Props) {
                 <CardTitle className="flex items-center gap-2 text-base">
                     🚨 Risk Alerts
                     {unresolvedAnomalies.length > 0 && (
-                        <span className="text-[11px] font-medium text-red-400 bg-red-500/8 px-2 py-0.5 rounded-full">
+                        <span className="text-[11px] font-medium text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
                             {unresolvedAnomalies.length} active
                         </span>
                     )}
@@ -67,34 +67,48 @@ export default function AlertsPanel({ anomalies }: Props) {
                             >
                                 <div className="flex justify-between items-start mb-1.5">
                                     <div>
-                                        <span className="text-[13px] font-semibold text-red-400">
+                                        <span className="text-[13px] font-semibold text-red-600 dark:text-red-400">
                                             🔓 Document Tampered
                                         </span>
                                         <span className="text-[11px] text-muted-foreground ml-2">{a.shipment_id}</span>
                                     </div>
-                                    <span className="text-[10px] font-bold text-red-400 bg-red-500/15 px-2 py-0.5 rounded animate-pulse">
+                                    <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/15 px-2 py-0.5 rounded animate-pulse">
                                         CRITICAL
                                     </span>
                                 </div>
                                 {a.location_code && (
-                                    <p className="text-[11px] text-muted-foreground">📍 Detected at: <strong className="text-red-300">{a.location_code}</strong></p>
+                                    <p className="text-[11px] text-muted-foreground">📍 Detected at: <strong className="text-red-600 dark:text-red-300">{a.location_code}</strong></p>
                                 )}
-                                <p className="text-[11px] text-red-300/80 mt-1 leading-relaxed">
+                                <p className="text-[11px] text-red-700/80 dark:text-red-300/80 mt-1 leading-relaxed">
                                     {a.details?.message || "Document hash does not match on-chain record. Possible tampering detected."}
                                 </p>
                                 {a.details?.expected_hash && a.details?.current_hash && (
                                     <div className="mt-2 p-2 rounded bg-red-500/5 font-mono text-[10px] space-y-0.5">
                                         <p className="text-muted-foreground">
-                                            On-chain: <span className="text-green-400">{String(a.details.expected_hash).slice(0, 16)}...</span>
+                                            On-chain: <span className="text-green-600 dark:text-green-400">{String(a.details.expected_hash).slice(0, 16)}...</span>
                                         </p>
                                         <p className="text-muted-foreground">
-                                            Current:  <span className="text-red-400">{String(a.details.current_hash).slice(0, 16)}...</span>
+                                            Current:  <span className="text-red-600 dark:text-red-400">{String(a.details.current_hash).slice(0, 16)}...</span>
                                         </p>
                                     </div>
                                 )}
-                                <p className="text-[10px] text-amber-400 mt-2 font-medium">
-                                    ⚠️ Manufacturer and receiver have been notified
-                                </p>
+
+                                {/* GenAI Assessment for tamper anomalies */}
+                                {a.genai_assessment && (
+                                    <div className="mt-2 p-2.5 rounded-md bg-card/50 border border-border/30 text-xs leading-relaxed">
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400 text-[11px]">🤖 AI Assessment</span>
+                                        <p className="text-muted-foreground mt-1">{a.genai_assessment.risk_assessment}</p>
+                                        {a.genai_assessment.business_impact && (
+                                            <p className="text-muted-foreground mt-1"><strong>Impact:</strong> {a.genai_assessment.business_impact}</p>
+                                        )}
+                                        <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium text-[11px]">→ {a.genai_assessment.recommended_action}</p>
+                                    </div>
+                                )}
+                                {!a.genai_assessment && (
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-2 font-medium">
+                                        ⚠️ Manufacturer and receiver have been notified
+                                    </p>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -127,10 +141,13 @@ export default function AlertsPanel({ anomalies }: Props) {
                                 )}
 
                                 {a.genai_assessment && (
-                                    <div className="mt-2 p-2.5 rounded-md bg-card/50 text-xs leading-relaxed">
-                                        <span className="font-semibold text-purple-400 text-[11px]">🤖 AI Assessment</span>
+                                    <div className="mt-2 p-2.5 rounded-md bg-card/50 border border-border/30 text-xs leading-relaxed">
+                                        <span className="font-semibold text-purple-600 dark:text-purple-400 text-[11px]">🤖 AI Assessment</span>
                                         <p className="text-muted-foreground mt-1">{a.genai_assessment.risk_assessment}</p>
-                                        <p className="text-amber-400/80 mt-1 font-medium text-[11px]">→ {a.genai_assessment.recommended_action}</p>
+                                        {a.genai_assessment.business_impact && (
+                                            <p className="text-muted-foreground mt-1"><strong>Impact:</strong> {a.genai_assessment.business_impact}</p>
+                                        )}
+                                        <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium text-[11px]">→ {a.genai_assessment.recommended_action}</p>
                                     </div>
                                 )}
                             </div>
