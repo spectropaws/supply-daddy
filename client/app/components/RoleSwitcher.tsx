@@ -10,7 +10,6 @@ interface Props {
 
 const roles: { key: Role; label: string; icon: string }[] = [
     { key: "manufacturer", label: "Manufacturer", icon: "🏭" },
-    { key: "transit_node", label: "Transit Node", icon: "🚚" },
     { key: "receiver", label: "Receiver", icon: "📦" },
 ];
 
