@@ -3,6 +3,7 @@ Auth Middleware — FastAPI dependencies for route protection.
 Verifies Firebase ID tokens from the Authorization header.
 """
 
+import asyncio
 import logging
 from fastapi import Request, HTTPException, Depends
 from services import firebase_service
@@ -42,7 +43,7 @@ async def get_current_user(request: Request) -> UserContext:
         raise HTTPException(status_code=500, detail="Firebase Auth not available on server")
 
     try:
-        decoded = firebase_auth.verify_id_token(id_token)
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, id_token)
     except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(status_code=401, detail="Token expired")
     except firebase_auth.InvalidIdTokenError:

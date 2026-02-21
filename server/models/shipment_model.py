@@ -23,14 +23,18 @@ class RiskProfile(BaseModel):
 
 class ShipmentCreate(BaseModel):
     """Input for creating a new shipment."""
-    shipment_id: str = Field(..., description="Unique shipment identifier")
     origin: str
     destination: str
     receiver_id: str = Field(..., description="User ID of the receiver")
-    route: list[RouteNode] = Field(default=[], description="If empty, auto-generated from origin/destination")
-    po_text: Optional[str] = None
-    invoice_text: Optional[str] = None
-    bol_text: Optional[str] = None
+    po_text: Optional[str] = ""
+    invoice_text: Optional[str] = ""
+    bol_text: Optional[str] = ""
+
+class ShipmentTamper(BaseModel):
+    """Input for tampering a shipment's documents."""
+    po_text: Optional[str] = ""
+    invoice_text: Optional[str] = ""
+    bol_text: Optional[str] = ""
 
 
 class ShipmentResponse(BaseModel):

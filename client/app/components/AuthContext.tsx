@@ -19,7 +19,7 @@ export interface User {
     user_id: string;
     username: string;
     email: string;
-    role: "manufacturer" | "transit_node" | "receiver";
+    role: "manufacturer" | "receiver";
     node_codes: string[];
 }
 
@@ -109,7 +109,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!loading && !firebaseUser && pathname !== "/login") {
             router.push("/login");
         }
-    }, [loading, firebaseUser, pathname, router]);
+        // Also redirect to login if user has Firebase auth but needs role setup
+        if (!loading && firebaseUser && needsRole && pathname !== "/login") {
+            router.push("/login");
+        }
+    }, [loading, firebaseUser, needsRole, pathname, router]);
 
     const register = useCallback(
         async (data: { username: string; email: string; password: string }) => {

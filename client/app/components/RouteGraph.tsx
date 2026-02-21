@@ -13,7 +13,7 @@ import {
     Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Shipment } from "../page";
+import type { Shipment, Anomaly } from "../page";
 import { apiFetch, API_BASE } from "../lib/apiFetch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -24,18 +24,37 @@ interface GraphData {
 
 interface Props {
     shipment: Shipment | null;
+    anomalies?: Anomaly[];
 }
 
 /* Custom node with handles on all 4 sides for clean edge routing */
-function TransitNode({ data }: { data: { label: string; code: string; status: string } }) {
+function TransitNode({ data }: { data: { label: string; code: string; status: string; anomalySeverity?: string } }) {
     const colorMap: Record<string, string> = {
-        visited: "#10b981",
-        current: "#3b82f6",
-        upcoming: "#64748b",
+        visited: "#10b981", // green
+        current: "#3b82f6", // blue
+        upcoming: "#64748b", // slate
         default: "#64748b",
+        anomaly_critical: "#ef4444", // red
+        anomaly_high: "#ef4444", // red
+        anomaly_medium: "#eab308", // yellow
+        anomaly_low: "#eab308", // yellow
     };
-    const color = colorMap[data.status] || colorMap.default;
-    const isCurrent = data.status === "current";
+
+    let color = colorMap[data.status] || colorMap.default;
+    let isAlert = false;
+
+    if (data.anomalySeverity) {
+        const sev = data.anomalySeverity.toLowerCase();
+        if (sev === "critical" || sev === "high") {
+            color = colorMap.anomaly_critical;
+            isAlert = true;
+        } else if (sev === "medium" || sev === "low") {
+            color = colorMap.anomaly_medium;
+            isAlert = true;
+        }
+    }
+
+    const isCurrent = data.status === "current" && !isAlert;
 
     const hiddenHandle: React.CSSProperties = { visibility: "hidden", width: 1, height: 1 };
 
@@ -53,20 +72,20 @@ function TransitNode({ data }: { data: { label: string; code: string; status: st
             <Handle type="target" position={Position.Right} id="t-right" style={hiddenHandle} />
             <div
                 style={{
-                    background: "hsl(var(--card))",
+                    background: isAlert ? `${color}15` : "hsl(var(--card))",
                     border: `2px solid ${color}`,
                     borderRadius: "12px",
                     padding: "8px 14px",
                     textAlign: "center",
                     minWidth: "80px",
-                    boxShadow: isCurrent ? `0 0 16px ${color}55` : "0 2px 8px rgba(0,0,0,0.3)",
-                    animation: isCurrent ? "pulse-glow 2s ease-in-out infinite" : "none",
+                    boxShadow: isAlert ? `0 0 16px ${color}88` : isCurrent ? `0 0 16px ${color}55` : "0 2px 8px rgba(0,0,0,0.3)",
+                    animation: isAlert ? "pulse-glow 1s ease-in-out infinite alternate" : isCurrent ? "pulse-glow 2s ease-in-out infinite" : "none",
                 }}
             >
                 <div style={{ fontSize: "11px", fontWeight: 700, color, letterSpacing: "0.5px" }}>
                     {data.code}
                 </div>
-                <div style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", marginTop: "2px", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "10px", color: isAlert ? color : "hsl(var(--muted-foreground))", marginTop: "2px", whiteSpace: "nowrap" }}>
                     {data.label}
                 </div>
             </div>
@@ -96,7 +115,7 @@ function getHandles(
 
 const nodeTypes: NodeTypes = { transit: TransitNode };
 
-export default function RouteGraph({ shipment }: Props) {
+export default function RouteGraph({ shipment, anomalies }: Props) {
     const [graphData, setGraphData] = useState<GraphData | null>(null);
 
     useEffect(() => {
@@ -110,6 +129,19 @@ export default function RouteGraph({ shipment }: Props) {
         if (!graphData) return { flowNodes: [], flowEdges: [] };
 
         const routeCodes = new Set(shipment?.route?.map((n) => n.location_code) || []);
+
+        const anomalyMap = new Map<string, string>();
+        if (anomalies) {
+            const weights: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+            for (const a of anomalies) {
+                if (!a.location_code || a.resolved) continue;
+                const currentSev = anomalyMap.get(a.location_code);
+                const aSev = a.severity.toUpperCase();
+                if (!currentSev || (weights[aSev] || 0) > (weights[currentSev] || 0)) {
+                    anomalyMap.set(a.location_code, aSev);
+                }
+            }
+        }
 
         // Build a DIRECTED map: for each consecutive pair in the route,
         // store the direction so we can orient edges correctly.
@@ -142,7 +174,12 @@ export default function RouteGraph({ shipment }: Props) {
             id: n.id,
             type: "transit",
             position: { x: n.x * 1.3, y: n.y * 1.1 },
-            data: { label: n.name.replace(" Hub", ""), code: n.id, status: nodeStatus(n.id) },
+            data: {
+                label: n.name.replace(" Hub", ""),
+                code: n.id,
+                status: nodeStatus(n.id),
+                anomalySeverity: anomalyMap.get(n.id)
+            },
         }));
 
         const flowEdges: Edge[] = graphData.edges.map((e) => {

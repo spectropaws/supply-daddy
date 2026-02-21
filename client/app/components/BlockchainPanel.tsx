@@ -18,7 +18,7 @@ export default function BlockchainPanel({ shipment, apiBase }: Props) {
                 <CardTitle className="flex items-center gap-2 text-base">
                     ⛓️ Blockchain Anchors
                     {txHashes.length > 0 && (
-                        <span className="text-[11px] font-medium text-green-400 bg-green-500/8 px-2 py-0.5 rounded-full">
+                        <span className="text-[11px] font-medium text-green-600 dark:text-green-400 bg-green-500/8 px-2 py-0.5 rounded-full">
                             {txHashes.length} anchored
                         </span>
                     )}
@@ -49,7 +49,7 @@ export default function BlockchainPanel({ shipment, apiBase }: Props) {
                                 #{i + 1}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-[11px] font-medium text-green-400/80">Checkpoint Anchored</p>
+                                <p className="text-[11px] font-medium text-green-600 dark:text-green-400">Checkpoint Anchored</p>
                                 <p className="text-[10px] text-muted-foreground font-mono overflow-hidden text-ellipsis whitespace-nowrap mt-0.5" title={hash}>
                                     {hash === "0x" + "0".repeat(64) ? "Stubbed (no blockchain connected)" : hash}
                                 </p>
@@ -60,7 +60,7 @@ export default function BlockchainPanel({ shipment, apiBase }: Props) {
                 </div>
 
                 {shipment && txHashes.length > 0 && (
-                    <div className="mt-4 p-2.5 rounded-lg bg-green-500/5 text-[11px] text-green-400/80 font-medium text-center">
+                    <div className="mt-4 p-2.5 rounded-lg bg-green-500/5 text-[11px] text-green-600 dark:text-green-400 font-medium text-center">
                         🛡️ {txHashes.length} immutable record{txHashes.length !== 1 && "s"} anchored on-chain
                     </div>
                 )}

@@ -42,17 +42,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow all for hackathon (ngrok domains are dynamic)
-_cors_origins = os.getenv("CORS_ORIGINS", "")
-if _cors_origins:
-    _allowed = [o.strip() for o in _cors_origins.split(",")]
-else:
-    _allowed = ["*"]
-
+# CORS — allow all origins for hackathon
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

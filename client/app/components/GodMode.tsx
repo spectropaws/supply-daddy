@@ -19,15 +19,20 @@ export default function GodMode({ shipments, onAction, apiBase, token }: Props) 
         temperature: 22, humidity: 45, weight_kg: 100,
     });
 
-    // Tamper form
-    const [tamperForm, setTamperForm] = useState({ shipment_id: "", po_text: "", invoice_text: "", bol_text: "" });
+    // Tamper form — now text-based instead of file-based
+    const [tamperForm, setTamperForm] = useState({ shipment_id: "" });
+    const [tamperTexts, setTamperTexts] = useState({
+        po_text: "", invoice_text: "", bol_text: "",
+    });
 
     const exec = async (endpoint: string, body: any, method: string = "POST") => {
         setLoading(true); setResult(null);
         try {
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
+
             const res = await apiFetch(`${apiBase}${endpoint}`, { method, headers, body: JSON.stringify(body) });
+
             setResult(await res.json());
             onAction();
         } catch (e: any) { setResult({ error: e.message }); }
@@ -49,7 +54,7 @@ export default function GodMode({ shipments, onAction, apiBase, token }: Props) 
         <div className="bg-gradient-to-r from-purple-500/3 to-pink-500/3 border-b border-border/30 px-8 py-4">
             <div className="max-w-[1600px] mx-auto">
                 <div className="flex items-center gap-3 mb-3">
-                    <span className="text-sm font-bold text-purple-400">⚡ God Mode</span>
+                    <span className="text-sm font-bold text-purple-600 dark:text-purple-400">⚡ God Mode</span>
                     <span className="text-[11px] text-muted-foreground">Manually scan nodes or tamper documents</span>
                 </div>
                 <Tabs defaultValue="scan" onValueChange={() => setResult(null)}>
@@ -117,13 +122,13 @@ export default function GodMode({ shipments, onAction, apiBase, token }: Props) 
                                     <div className="flex gap-1.5 items-center text-[11px]">
                                         {s.route.map((n, i) => (
                                             <React.Fragment key={n.location_code}>
-                                                <span className={`px-1.5 py-0.5 rounded ${n.actual_arrival ? "bg-green-500/10 text-green-400" : n.location_code === scanForm.location_code ? "bg-blue-500/10 text-blue-400 font-bold" : "text-muted-foreground"}`}>
+                                                <span className={`px-1.5 py-0.5 rounded ${n.actual_arrival ? "bg-green-500/10 text-green-600 dark:text-green-400" : n.location_code === scanForm.location_code ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold" : "text-muted-foreground"}`}>
                                                     {n.location_code}
                                                 </span>
                                                 {i < s.route.length - 1 && <span className="text-muted-foreground/40">→</span>}
                                             </React.Fragment>
                                         ))}
-                                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${s.current_status === "delivered" ? "bg-green-500/10 text-green-400" : s.current_status === "in_transit" ? "bg-amber-500/10 text-amber-400" : "bg-blue-500/10 text-blue-400"}`}>
+                                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${s.current_status === "delivered" ? "bg-green-500/10 text-green-600 dark:text-green-400" : s.current_status === "in_transit" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400"}`}>
                                             {s.current_status}
                                         </span>
                                     </div>
@@ -146,35 +151,38 @@ export default function GodMode({ shipments, onAction, apiBase, token }: Props) 
                             </div>
                             {tamperForm.shipment_id && (
                                 <>
-                                    <div className="p-2 rounded-md bg-red-500/5 text-[11px] text-red-400">
-                                        ⚠️ Modifying these texts changes the document hash. The next checkpoint will detect the mismatch and flag a <strong>document_tampered</strong> anomaly.
+                                    <div className="p-2 rounded-md bg-red-500/5 text-[11px] text-red-600 dark:text-red-400">
+                                        ⚠️ Editing these fields overwrites the document text in Firestore <strong>without</strong> updating the on-chain hash. The next checkpoint will detect the hash mismatch and flag a <strong>document_tampered</strong> anomaly.
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-2 mt-1">
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-muted-foreground">Purchase Order</Label>
-                                            <textarea className={tac} placeholder="Modify PO text..."
-                                                value={tamperForm.po_text} onChange={(e) => setTamperForm({ ...tamperForm, po_text: e.target.value })} />
+                                            <Label className="text-[11px] text-red-600 dark:text-red-400">🧾 Tampered PO Text</Label>
+                                            <textarea className={tac} placeholder="Enter fake purchase order text..."
+                                                value={tamperTexts.po_text}
+                                                onChange={(e) => setTamperTexts({ ...tamperTexts, po_text: e.target.value })} />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-muted-foreground">Invoice</Label>
-                                            <textarea className={tac} placeholder="Modify invoice text..."
-                                                value={tamperForm.invoice_text} onChange={(e) => setTamperForm({ ...tamperForm, invoice_text: e.target.value })} />
+                                            <Label className="text-[11px] text-red-600 dark:text-red-400">💸 Tampered Invoice Text</Label>
+                                            <textarea className={tac} placeholder="Enter fake invoice text..."
+                                                value={tamperTexts.invoice_text}
+                                                onChange={(e) => setTamperTexts({ ...tamperTexts, invoice_text: e.target.value })} />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-muted-foreground">Bill of Lading</Label>
-                                            <textarea className={tac} placeholder="Modify BOL text..."
-                                                value={tamperForm.bol_text} onChange={(e) => setTamperForm({ ...tamperForm, bol_text: e.target.value })} />
+                                            <Label className="text-[11px] text-red-600 dark:text-red-400">📦 Tampered BOL Text</Label>
+                                            <textarea className={tac} placeholder="Enter fake bill of lading text..."
+                                                value={tamperTexts.bol_text}
+                                                onChange={(e) => setTamperTexts({ ...tamperTexts, bol_text: e.target.value })} />
                                         </div>
                                     </div>
                                     <Button
                                         onClick={() => {
-                                            const body: Record<string, string> = {};
-                                            if (tamperForm.po_text) body.po_text = tamperForm.po_text;
-                                            if (tamperForm.invoice_text) body.invoice_text = tamperForm.invoice_text;
-                                            if (tamperForm.bol_text) body.bol_text = tamperForm.bol_text;
-                                            exec(`/shipments/${tamperForm.shipment_id}/tamper`, body, "PUT");
+                                            const payload: any = {};
+                                            if (tamperTexts.po_text) payload.po_text = tamperTexts.po_text;
+                                            if (tamperTexts.invoice_text) payload.invoice_text = tamperTexts.invoice_text;
+                                            if (tamperTexts.bol_text) payload.bol_text = tamperTexts.bol_text;
+                                            exec(`/shipments/${tamperForm.shipment_id}/tamper`, payload, "PUT");
                                         }}
-                                        disabled={loading || !tamperForm.shipment_id || (!tamperForm.po_text && !tamperForm.invoice_text && !tamperForm.bol_text)}
+                                        disabled={loading || !tamperForm.shipment_id || (!tamperTexts.po_text && !tamperTexts.invoice_text && !tamperTexts.bol_text)}
                                         className="bg-red-600 text-white hover:bg-red-700 text-xs"
                                     >{loading ? "⏳..." : "🔓 Tamper Documents"}</Button>
                                 </>
@@ -184,7 +192,7 @@ export default function GodMode({ shipments, onAction, apiBase, token }: Props) 
                 </Tabs>
 
                 {result && (
-                    <div className={`animate-fade-in-scale mt-3 p-3 rounded-lg text-xs font-mono max-h-[180px] overflow-auto ${result.error || result.hash_verification?.tamper_detected || result.status === "tampered" ? "bg-red-500/5 text-red-400" : result.status === "delivered" ? "bg-green-500/5 text-green-400" : "bg-secondary/30 text-muted-foreground"}`}>
+                    <div className={`animate-fade-in-scale mt-3 p-3 rounded-lg text-xs font-mono max-h-[180px] overflow-auto ${result.error || result.hash_verification?.tamper_detected || result.status === "tampered" ? "bg-red-500/5 text-red-600 dark:text-red-400" : result.status === "delivered" ? "bg-green-500/5 text-green-600 dark:text-green-400" : "bg-secondary/30 text-muted-foreground"}`}>
                         <pre className="whitespace-pre-wrap m-0">{JSON.stringify(result, null, 2)}</pre>
                     </div>
                 )}

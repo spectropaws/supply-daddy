@@ -3,6 +3,7 @@ Auth routes — Firebase Auth integration.
 Handles user profile setup (role selection) after Firebase authentication.
 """
 
+import asyncio
 import uuid
 import logging
 from datetime import datetime
@@ -22,7 +23,7 @@ except ImportError:
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-VALID_ROLES = {"manufacturer", "transit_node", "receiver"}
+VALID_ROLES = {"manufacturer", "receiver"}
 
 
 class RoleSetup(BaseModel):
@@ -53,7 +54,7 @@ async def setup_role(data: RoleSetup, request: Request):
         raise HTTPException(status_code=500, detail="Firebase Auth not available")
 
     try:
-        decoded = firebase_auth.verify_id_token(id_token)
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, id_token)
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
@@ -73,7 +74,7 @@ async def setup_role(data: RoleSetup, request: Request):
         "username": display_name,
         "email": email,
         "role": data.role,
-        "node_codes": data.node_codes if data.role == "transit_node" else [],
+        "node_codes": [],
         "created_at": datetime.utcnow().isoformat(),
     }
 
